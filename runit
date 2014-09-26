@@ -1,0 +1,39 @@
+#!/bin/bash
+# runit -- start processing with dutch pipeline
+ROOT=`pwd`
+INTRAY=$ROOT/data/intray
+OUTTRAY=$ROOT/data/outtray
+JOBSCRIPT=dutch-pipeline-job
+JOBSCRIPTTEMPLATE=$JOBSCRIPT.m4
+POOL=defaultpool
+
+#
+# Create pool
+#
+module load stopos
+FILELIST=`mktemp -t filelist.XXXXXX`
+cd $INTRAY
+ls -1 >$FILELIST
+INFILCOUNT=`wc -l $FILELIST`
+cd $ROOT
+stopos -p $POOL purge
+stopos create -p $POOL
+stopos -p $POOL add $FILELIST
+rm -rf $FILELIST
+
+#
+# Generate job script
+#
+m4 -P $JOBSCRIPTTEMPLATE >$JOBSCRIPT
+
+#
+# Submit jobs
+#
+FILESPERJOB=100
+FILCOUNT=$INFILCOUNT
+while
+  [ $FILCOUNT -gt 0 ]
+do
+  qsub $JOBSCRIPTNAME
+  $FILCOUNT=$((FILCOUNT-100))
+done

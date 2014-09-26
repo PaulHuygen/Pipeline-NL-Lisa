@@ -1,0 +1,8 @@
+# .Gitignore
+
+*~
+
+dutch-pipeline-job
+data/intray/*
+data/outtray/*
+
