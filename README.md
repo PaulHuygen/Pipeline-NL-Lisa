@@ -11,8 +11,8 @@ separately with [this Github repository](https://github.com/PaulHuygen/dutch-nlp
 
 1. Clone this repository.
 2. Put inputfiles in directory `data/intray`.
-3. Edit nlpipejob.
-4. Start script `doit`.
+3. Edit `dutch-pipeline-job.m4`.
+4. Start script `runit`.
 5. Manage.
 6. Retrieve the result from directory `data/outtray`.
 
@@ -37,3 +37,22 @@ which it is aborted. As a result, processing some of the files will
 never be completed. Currently the user has to find out which files
 have gone stuck and re-submit them.
 
+
+
+# Loose ends
+
+## Memory management
+
+The number of processes that can run parallel in a node is limited by
+the amount of memory that the programs need. Therefore, the number of
+parallel processes is determinied by the modules in the pipeline. I
+have not yet fount an easy way to automatically determine how many
+processes can run in parallel.
+
+## Aborted processes
+
+Usually jobs are aborted while they are processing files. As a result,
+processing of those files will not be completed. Currently, the
+unclompleted files must be identified and re-submitted manually. What
+is needed is a management module that runs on a regular basis
+(e.g. cron job) and that performs thins job.

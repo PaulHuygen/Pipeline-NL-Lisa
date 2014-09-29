@@ -11,6 +11,7 @@ POOL=defaultpool
 
 INTRAY=$DATAROOT/intray
 OUTTRAY=$DATAROOT/outtray
+BINDIR=/home/phuijgen/nlp/dutch-nlp-modules-on-Lisa/bin
 MODDIR=/home/phuijgen/nlp/dutch-nlp-modules-on-Lisa/modules
 
 TEMPTRAY=$DATAROOT/temptray
@@ -21,7 +22,7 @@ BOOKKEEPFILE=$DATAROOT/timelog
 
 function process_file () {
   FILNAM=$1
-  cat $INTRAY/$1 | $MODDIR/tok | $MODDIR/mor > $OUTTRAY/$1  
+  cat $INTRAY/$1 | $BINDIR/tok | $BINDIR/mor > $OUTTRAY/$1  
 #  $BINDIR/alpinohack <$DATAROOT/bioport_mor/$FILNAM >$DATAROOT/alpinohack/$FILNAM
 #  $BINDIR/ner        <$DATAROOT/alpinohack/$FILNAM  >$DATAROOT/ner/$FILNAM
 #  $BINDIR/wsd        <$DATAROOT/ner/$FILNAM         >$DATAROOT/wsd/$FILNAM
@@ -84,7 +85,7 @@ export SP_CTYPE=utf8
 cd $TMPDIR
 export NCORES=`sara-get-num-cores`
 export MEMORY=`head -n 1 < /proc/meminfo | gawk '{print $2}'`
-export MEMCHUNKS=$((MEMORY / 10000000))
+export MEMCHUNKS=$((MEMORY / 5000000))
 
 MAXPROCS=$((NCORES-1))
 if
@@ -95,7 +96,7 @@ fi
 
 export MAXPROCS
 echo Cores: $NCORES
-echo Memory: $MEMORY, allowing for $MEMCHUNKS divisions of 10 GB
+echo Memory: $MEMORY, allowing for $MEMCHUNKS divisions of 5 GB
 echo Max. number of processes:  $MAXPROCS
 echo 0 >$TMPDIR/proctal
 

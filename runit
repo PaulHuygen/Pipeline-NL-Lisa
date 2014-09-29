@@ -14,7 +14,7 @@ module load stopos
 FILELIST=`mktemp -t filelist.XXXXXX`
 cd $INTRAY
 ls -1 >$FILELIST
-INFILCOUNT=`wc -l $FILELIST`
+INFILCOUNT=`wc -l $FILELIST | gawk '{print $1}'`
 cd $ROOT
 stopos -p $POOL purge
 stopos create -p $POOL
