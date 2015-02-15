@@ -9,9 +9,6 @@ INTRAY=$DATAROOT/intray
 OUTTRAY=$DATAROOT/outtray
 PROCTRAY=$DATAROOT/temptray
 JOBSCRIPT=dutch-pipeline-job
-mkdir -f -p $INTRAY
-mkdir -f -p $OUTTRAY
-mkdir -f -p $TEMPTRAY
 #JOBSCRIPT=testjob
 JOBSCRIPTTEMPLATE=$JOBSCRIPT.m4
 #
