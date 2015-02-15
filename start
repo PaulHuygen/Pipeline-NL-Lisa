@@ -2,18 +2,18 @@
 if
   [ "$1" == "" ]
 then
-  echo usage: startit <inputdir>
+  echo 'usage: startit inputdir'
   exit 4
 fi
 TESTDATADIR=$1
 ROOT=$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )
 DATADIR=$ROOT/data
 INTRAY=$DATADIR/intray
-PROCTRAY=$DATADIR/temptray
+PROCTRAY=$DATADIR/proctray
 OUTTRAY=$DATADIR/outtray
-mkdir -f -p $INTRAY
-mkdir -f -p $OUTTRAY
-mkdir -f -p $TEMPTRAY
+mkdir -p $INTRAY
+mkdir -p $OUTTRAY
+mkdir -p $PROCTRAY
 cp $TESTDATADIR/* $INTRAY/
 echo start runit
 ./runit

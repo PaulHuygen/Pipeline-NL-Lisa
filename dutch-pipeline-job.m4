@@ -21,7 +21,7 @@ export PATH=/home/phuijgen/usrlocal/bin:m4_pythonroot/bin:$PATH
 
 INTRAY=$DATAROOT/intray
 OUTTRAY=$DATAROOT/outtray
-PROCTRAY=$DATAROOT/temptray
+PROCTRAY=$DATAROOT/proctray
 BOOKKEEPFILE=$DATAROOT/timelog
 
 
