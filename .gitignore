@@ -5,6 +5,5 @@
 dutch-pipeline-job
 dutch-pipeline-job.o*
 dutch-pipeline-job.e*
-data/intray/*
-data/outtray/*
+data
 

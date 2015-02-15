@@ -1,39 +1,65 @@
 #!/bin/bash
 # runit -- start processing with dutch pipeline
-ROOT=`pwd`
-INTRAY=$ROOT/data/intray
-OUTTRAY=$ROOT/data/outtray
+#
+# Directories
+#
+ROOT=$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )
+DATAROOT=$ROOT/data
+INTRAY=$DATAROOT/intray
+OUTTRAY=$DATAROOT/outtray
+PROCTRAY=$DATAROOT/temptray
 JOBSCRIPT=dutch-pipeline-job
+mkdir -f -p $INTRAY
+mkdir -f -p $OUTTRAY
+mkdir -f -p $TEMPTRAY
+#JOBSCRIPT=testjob
 JOBSCRIPTTEMPLATE=$JOBSCRIPT.m4
-POOL=defaultpool
-
 #
-# Create pool
+# Move old files in proctray back to intray
 #
-module load stopos
-FILELIST=`mktemp -t filelist.XXXXXX`
-cd $INTRAY
-ls -1 >$FILELIST
-INFILCOUNT=`wc -l $FILELIST | gawk '{print $1}'`
-cd $ROOT
-stopos -p $POOL purge
-stopos create -p $POOL
-stopos -p $POOL add $FILELIST
-rm -rf $FILELIST
-
+find $PROCTRAY/* -amin +30 -print 2>/dev/null | xargs -Iaap mv aap  $INTRAY
+#
+# Count unprocessed, processed, being processed texts
+#
+INFILCOUNT=`ls -1 $INTRAY | wc -l`
+READYFILCOUNT=`ls -1 $OUTTRAY | wc -l`
+PROCFILCOUNT=`ls -1 $PROCTRAY | wc -l`
+#
+# Count submitted jobs
+#
+SUBMITTED_JOB_COUNT=`qstat -u  phuijgen | grep dutch | wc -l` 
 #
 # Generate job script
 #
 m4 -P $JOBSCRIPTTEMPLATE >$JOBSCRIPT
-
-#
+# 
 # Submit jobs
 #
 FILESPERJOB=100
-FILCOUNT=$INFILCOUNT
+FILECOUNT=$((INFILCOUNT + PROCFILCOUNT))
+JOBS_NEEDED=$((FILECOUNT / $FILESPERJOB))
+if
+  [ $FILECOUNT -gt 0 ]
+then
+  JOBS_NEEDED=$((FILECOUNT / $FILESPERJOB))
+  if
+    [ $JOBS_NEEDED -lt 1 ]
+  then
+    JOBS_NEEDED=1
+  fi
+fi  
+COUNTER=$((JOBS_NEEDED - $SUBMITTED_JOB_COUNT))
 while
-  [ $FILCOUNT -gt 0 ]
+  [ $COUNTER -gt 0 ]
 do
-  qsub $JOBSCRIPTNAME
-  $FILCOUNT=$((FILCOUNT-100))
+qsub $JOBSCRIPT
+  NEWJOBCOUNT=$((NEWJOBCOUNT + 1))
+  COUNTER=$((COUNTER - 1))
 done
+#
+# Report
+#
+echo Jobs submitted:  $((SUBMITTED_JOB_COUNT + NEWJOBCOUNT))
+echo Texts waiting:   $INFILCOUNT
+echo Texts under way: $PROCFILCOUNT
+echo Texts ready:     $READYFILCOUNT
