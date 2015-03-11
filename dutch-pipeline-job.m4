@@ -30,7 +30,7 @@ function process_file () {
   FILNAM=$1
   cat $PROCTRAY/$FILNAM       | $PIPEBINDIR/tok        > $TEMPDIR/file.tok.naf
   cat $TEMPDIR/file.tok.naf   | $PIPEBINDIR/mor        > $TEMPDIR/file.mor.naf
-  cat $TEMPDIR/file.mor.naf   | $PIPEBINDIR/nerc       > $TEMPDIR/file.nerc.naf
+  cat $TEMPDIR/file.mor.naf   | $PIPEBINDIR/nerc_conll02  > $TEMPDIR/file.nerc.naf
   cat $TEMPDIR/file.nerc.naf  | $PIPEBINDIR/wsd        > $TEMPDIR/file.wsd.naf
   cat $TEMPDIR/file.wsd.naf   | $PIPEBINDIR/ned        > $TEMPDIR/file.ned.naf
   cat $TEMPDIR/file.ned.naf   | $PIPEBINDIR/onto       > $TEMPDIR/file.onto.naf
