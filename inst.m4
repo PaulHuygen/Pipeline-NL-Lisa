@@ -1,4 +1,5 @@
 m4_define(m4_walltime, 30:00)m4_dnl
+m4_define(m4_extens, naf)m4_dnl
 m4_define(m4_projroot, m4_esyscmd(pwd))m4_dnl
 m4_define(m4_piperoot, /home/phuijgen/nlp/nlpp)m4_dnl
 m4_define(m4_pythonversion, `2.7.9')m4_dnl

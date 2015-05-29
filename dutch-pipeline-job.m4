@@ -22,8 +22,86 @@ export PATH=/home/phuijgen/usrlocal/bin:m4_pythonroot/bin:$PATH
 INTRAY=$DATAROOT/intray
 OUTTRAY=$DATAROOT/outtray
 PROCTRAY=$DATAROOT/proctray
+FAILTRAY=$DATAROOT/failtray
+mkdir -p $PROCTRAY
+mkdir -p $OUTTRAY
+mkdir -p $FAILTRAY
 BOOKKEEPFILE=$DATAROOT/timelog
 
+#
+# Move a file and create (part of) path if necessary.
+#
+function movefile() {
+   fullfile=$1
+   oldtray=$2
+   newtray=$3
+   inpath=${fullfile%/*}
+   trunk=${inpath#$oldtray} 
+   outpath=$newtray/$trunk
+   mkdir -p $outpath
+   mv $fullfile $outpath/
+}
+
+function copyfile() {
+   fullfile=$1
+   oldtray=$2
+   newtray=$3
+   inpath=${fullfile%/*}
+   trunk=${inpath#$oldtray} 
+   outpath=$newtray/$trunk
+   mkdir -p $outpath
+   cp $fullfile $outpath/
+}
+
+
+
+function move_oldprocs_back () {
+  while 
+    oldproc=`find $INTRAY -amin +30 -print 2>/dev/null | head -n 1`
+  do
+    if 
+      [ ! "$oldproc" == "" ]
+    then
+     TRUNK=${oldproc#$PROCTRAY/}
+     INFILE=$INTRAY/$TRUNK
+     movefile $oldproc $PROCTRAY $INTRAY
+    fi
+  done
+}
+#
+# Get a filename and put it in FILNAM
+# Set variables INFILE, PROCFIL, OUTFIL
+#
+function getfile() {
+  INFILE=""
+  PROCFILE=""
+  OUTFILE=""
+  FAILFILE=""
+  passeer
+    INFILE=`find $INTRAY -name *.m4_extens -print 2>/dev/null | head -n 1`
+    if
+      [ "$INFILE" == "" ]
+    then
+      move_oldprocs_back
+      INFILE=`find $INTRAY -name *.m4_extens -print 2>/dev/null | head -n 1`
+    fi
+    if
+      [ ! "$INFILE" == "" ]
+    then
+      TRUNK=${INFILE#$INTRAY/}
+      PROCFILE=$PROCTRAY/$TRUNK
+      OUTFILE=$OUTTRAY/$TRUNK
+      movefile $INFILE $INTRAY $PROCTRAY
+    fi
+  veilig
+}
+
+
+#
+# Process PROCFILE and place result in OUTFILE
+function testprocess () {
+  copyfile $PROCFILE $PROCTRAY $OUTTRAY
+}
 
 function process_file () {
   TEMPDIR=`mktemp -t -d ontemp.XXXXXX`
@@ -47,6 +125,17 @@ function startspotlight () {
   spotlightjar=dbpedia-spotlight-0.7-jar-with-dependencies-candidates.jar
   cd $spotlightdir
   java -jar -Xmx8g $spotlightdir/$spotlightjar nl http://localhost:2060/rest  &
+}
+
+function waitforspotlight () {
+   spottasks=0
+   while
+     [ $spottasks -eq 0 ]
+   do
+     echo Counting to ten ...
+     sleep 10
+     spottasks=`netstat -an | grep :2060 | wc -l`
+   done
 }
 
 
@@ -89,34 +178,15 @@ function remove_processed_file () {
     gawk '$2 == key { next } ; {print}' key=$key $TEMP_BEING_PROCESSED_LIST > $BEING_PROCESSED_LIST
     rm $TEMP_BEING_PROCESSED_LIST
   veilig
-  stopos remove -p $POOL $key
+#  stopos remove -p $POOL $key
 }
 
 
 startspotlight
+waitforspotlight
 
 
 FILNAM=""
-
-#
-# Get a filename and put it in FILNAM
-#
-function getfile() {
-  passeer
-    FILNAM=`ls -1 $INTRAY | head -n 1`
-    if
-      [ "$FILNAM" == "" ]
-    then
-      find $PROCTRAY/* -amin +30 -print 2>/dev/null | xargs -Iaap mv aap  $INTRAY
-      FILNAM=`ls -1 $INTRAY | head -n 1`
-    fi
-    if
-     [ ! "$FILNAM" == "" ]
-    then
-      mv $INTRAY/$FILNAM $PROCTRAY
-    fi
-  veilig
-}
 
 
 
@@ -150,18 +220,25 @@ do
     veilig
     while
       getfile
-      echo $PROCNUM, while: Got $FILNAM
-      [ ! -z "$FILNAM" ] 
+      [ ! -z "$INFILE" ] 
     do
       BTIME=`date +%s`
-      echo $PROCNUM: Got file $FILNAM
-      process_file $FILNAM
-#     $SCRIPT < $INTRAY/$FILNAM >$PROCTRAY/$FILNAM
-#      mv $PROCTRAY/$FILNAM $OUTTRAY
+      echo $PROCNUM: Got file $INFILE
+      testprocess
+      if
+         [ -s $OUTFILE ]
+      then
+         rm $PROCFILE
+      else
+         movefile $PROCFILE $PROCTRAY $FAILTRAY
+      fi
+#      process_file $INFILE
+#     $SCRIPT < $INTRAY/$INFILE >$PROCTRAY/$INFILE
+#      mv $PROCTRAY/$INFILE $OUTTRAY
 #      removefromlist
-      echo $PROCNUM: $FILNAM processed
+      echo $PROCNUM: $PROCFILE processed
       ETIME=`date +%s`
-#      echo `stat --printf="%s" $INFIL`"	$(($ETIME - $BTIME))	$FILNAM	$ALPCOMMAND" >> $BOOKKEEPFILE
+#      echo `stat --printf="%s" $INFIL`"	$(($ETIME - $BTIME))	$INFILE	$ALPCOMMAND" >> $BOOKKEEPFILE
     done
   ) &
 done
