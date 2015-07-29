@@ -2,34 +2,50 @@ m4_include(inst.m4)m4_dnl
 #!/bin/bash
 #PBS -lnodes=1
 <!#!>PBS -lwalltime=<!!>m4_walltime
-#ssh -N -f -L 2060:localhost:2060 huygen@kyoto.let.vu.nl
+#
+# Stopos
+#
 module load stopos
-#PROJROOT=$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )
+export STOPOSPOOL=m4_stopospool
+#
+# Paths
+#
 PROJROOT=m4_projroot
-echo PROJROOT: $PROJROOT
 DATAROOT=$PROJROOT/data
-echo DATAROOT: $DATAROOT
 PIPEROOT=m4_piperoot
 PIPEBINDIR=$PIPEROOT/bin
-
+export PATH=/home/phuijgen/usrlocal/bin:$PATH
+#
+# Language
+#
+export LANG=en_US.utf8
+export LANGUAGE=en_US.utf8
+export LC_ALL=en_US.utf8
+#
+# Logging
+#
 STARTTIME=`date +%s`
 LOGGING=true
-
+BOOKKEEPFILE=$DATAROOT/timelog
+#
+# Python
+#
 module load python/m4_pythonversion
 export PYTHONPATH=m4_pythonroot/lib/python2.7/site-packages:$PYTHONPATH
-export PATH=/home/phuijgen/usrlocal/bin:m4_pythonroot/bin:$PATH
-
+export PATH=m4_pythonroot/bin:$PATH
+#
+# Data trays
+#
 INTRAY=$DATAROOT/intray
 OUTTRAY=$DATAROOT/outtray
-PROCTRAY=$DATAROOT/proctray
 FAILTRAY=$DATAROOT/failtray
-mkdir -p $PROCTRAY
+LOGTRAY=$DATAROOT/logtray
 mkdir -p $OUTTRAY
 mkdir -p $FAILTRAY
-BOOKKEEPFILE=$DATAROOT/timelog
+mkdir -p $LOGTRAY
 
 #
-# Move a file and create (part of) path if necessary.
+# Move/copy a file and create (part of) path if necessary.
 #
 function movefile() {
    fullfile=$1
@@ -54,47 +70,67 @@ function copyfile() {
 }
 
 
+m4_dnl function move_oldprocs_back () {
+m4_dnl   while 
+m4_dnl     oldproc=`find $INTRAY -amin +30 -print 2>/dev/null | head -n 1`
+m4_dnl   do
+m4_dnl     if 
+m4_dnl       [ ! "$oldproc" == "" ]
+m4_dnl     then
+m4_dnl      TRUNK=${oldproc#$PROCTRAY/}
+m4_dnl      INFILE=$INTRAY/$TRUNK
+m4_dnl      movefile $oldproc $PROCTRAY $INTRAY
+m4_dnl     fi
+m4_dnl   done
+m4_dnl }
 
-function move_oldprocs_back () {
-  while 
-    oldproc=`find $INTRAY -amin +30 -print 2>/dev/null | head -n 1`
-  do
-    if 
-      [ ! "$oldproc" == "" ]
-    then
-     TRUNK=${oldproc#$PROCTRAY/}
-     INFILE=$INTRAY/$TRUNK
-     movefile $oldproc $PROCTRAY $INTRAY
-    fi
-  done
-}
+
 #
-# Get a filename and put it in FILNAM
-# Set variables INFILE, PROCFIL, OUTFIL
+# Get a filename
+# Set variables INFILE, OUTFIL, FAILFILE
 #
 function getfile() {
   INFILE=""
-  PROCFILE=""
   OUTFILE=""
-  FAILFILE=""
-  passeer
-    INFILE=`find $INTRAY -name *.m4_extens -print 2>/dev/null | head -n 1`
-    if
-      [ "$INFILE" == "" ]
-    then
-      move_oldprocs_back
-      INFILE=`find $INTRAY -name *.m4_extens -print 2>/dev/null | head -n 1`
-    fi
-    if
-      [ ! "$INFILE" == "" ]
-    then
-      TRUNK=${INFILE#$INTRAY/}
-      PROCFILE=$PROCTRAY/$TRUNK
-      OUTFILE=$OUTTRAY/$TRUNK
-      movefile $INFILE $INTRAY $PROCTRAY
-    fi
-  veilig
+  stopos -p $STOPOSPOOL next
+  if
+    [ "$STOPOS_RC" == "OK" ]
+  then
+    INFILE=$STOPOS_VALUE
+    FILTRUNK=${INFILE##$INTRAY/}
+    OUTFILE=$OUTTRAY/${FILTRUNK}
+    LOGFILE=$LOGTRAY/${FILTRUNK}
+    FAILFILE=$FAILTRAY/${FILTRUNK}
+    OUTPATH=${OUTFILE%/*}
+    FAILPATH=${FAILFILE%/*}
+    LOGPATH=${LOGFILE%/*}
+    echo To process $INFILE
+  fi
 }
+
+m4_dnl function getfile() {
+m4_dnl   INFILE=""
+m4_dnl   PROCFILE=""
+m4_dnl   OUTFILE=""
+m4_dnl   FAILFILE=""
+m4_dnl   passeer
+m4_dnl     INFILE=`find $INTRAY -name *.m4_extens -print 2>/dev/null | head -n 1`
+m4_dnl     if
+m4_dnl       [ "$INFILE" == "" ]
+m4_dnl     then
+m4_dnl       move_oldprocs_back
+m4_dnl       INFILE=`find $INTRAY -name *.m4_extens -print 2>/dev/null | head -n 1`
+m4_dnl     fi
+m4_dnl     if
+m4_dnl       [ ! "$INFILE" == "" ]
+m4_dnl     then
+m4_dnl       TRUNK=${INFILE#$INTRAY/}
+m4_dnl       PROCFILE=$PROCTRAY/$TRUNK
+m4_dnl       OUTFILE=$OUTTRAY/$TRUNK
+m4_dnl       movefile $INFILE $INTRAY $PROCTRAY
+m4_dnl     fi
+m4_dnl   veilig
+m4_dnl }
 
 
 #
@@ -104,40 +140,67 @@ function testprocess () {
 }
 
 function process_file () {
+  OLDD=`pwd`
   TEMPDIR=`mktemp -t -d ontemp.XXXXXX`
-  FILNAM=$1
-  cat $PROCTRAY/$FILNAM       | $PIPEBINDIR/tok        > $TEMPDIR/file.tok.naf
-  cat $TEMPDIR/file.tok.naf   | $PIPEBINDIR/mor        > $TEMPDIR/file.mor.naf
-  cat $TEMPDIR/file.mor.naf   | $PIPEBINDIR/nerc_conll02  > $TEMPDIR/file.nerc.naf
-  cat $TEMPDIR/file.nerc.naf  | $PIPEBINDIR/wsd        > $TEMPDIR/file.wsd.naf
-  cat $TEMPDIR/file.wsd.naf   | $PIPEBINDIR/ned        > $TEMPDIR/file.ned.naf
-  cat $TEMPDIR/file.ned.naf   | $PIPEBINDIR/onto       > $TEMPDIR/file.onto.naf
-  cat $TEMPDIR/file.onto.naf  | $PIPEBINDIR/heideltime > $TEMPDIR/file.times.naf
-  cat $TEMPDIR/file.times.naf | $PIPEBINDIR/srl        > $TEMPDIR/file.srl.naf
-  cat $TEMPDIR/file.srl.naf   | $PIPEBINDIR/evcoref    > $TEMPDIR/file.ecrf.naf
-  cat $TEMPDIR/file.ecrf.naf  | $PIPEBINDIR/framesrl   > $OUTTRAY/$FILNAM
-  rm $PROCTRAY/$FILNAM
+  cd $TEMPDIR
+  cat $INFILE    | $PIPEBINDIR/tok           > tok.naf
+  cat tok.naf    | $PIPEBINDIR/mor           > mor.naf
+  cat mor.naf    | $PIPEBINDIR/nerc_conll02  > nerc.naf
+  cat nerc.naf   | $PIPEBINDIR/wsd           > wsd.naf
+  cat wsd.naf    | $PIPEBINDIR/ned           > ned.naf
+  cat ned.naf    | $PIPEBINDIR/heideltime    > otimes.naf
+  cat otimes.naf | gawk -f $PIPEBINDIR/remprol.awk  > times.naf
+  cat times.naf  | $PIPEBINDIR/onto          > onto.naf
+  cat onto.naf   | $PIPEBINDIR/srl           > srl.naf
+  cat srl.naf    | $PIPEBINDIR/evcoref       > ecrf.naf
+  cat ecrf.naf   | $PIPEBINDIR/framesrl      > fsrl.naf
+  cat fsrl.naf   | $PIPEBINDIR/dbpner        > dbpner.naf
+  cat dbpner.naf | $PIPEBINDIR/nomevent      > nomev.naf
+  cat nomev.naf  | $PIPEBINDIR/postsrl             > out.naf
+  if
+     [ -e out.naf -a $(stat -c%s "out.naf") -gt 700 ]
+  then
+    mkdir -p $OUTPATH
+    cp $TEMPDIR/out.naf $OUTFILE
+    echo Produced $OUTFILE of size $(stat -c%s "$OUTFILE")
+  else
+     if
+       [ ! -e $TEMPDIR/file.out.naf ]
+     then
+       echo Not produced: $OUTFILE
+     else
+       Too small $OUTFILE: $(stat -c%s "out.naf") 
+     fi
+  fi
+  cd $OLDD
   rm -rf $TEMPDIR 
 }
 
+m4_dnl function startspotlight () {
+m4_dnl   spotlightdir=$PIPEROOT/env/spotlight/
+m4_dnl   spotlightjar=dbpedia-spotlight-0.7-jar-with-dependencies-candidates.jar
+m4_dnl   cd $spotlightdir
+m4_dnl   java -jar -Xmx8g $spotlightdir/$spotlightjar nl http://localhost:2060/rest  &
+m4_dnl }
+m4_dnl 
+m4_dnl function waitforspotlight () {
+m4_dnl    spottasks=0
+m4_dnl    while
+m4_dnl      [ $spottasks -eq 0 ]
+m4_dnl    do
+m4_dnl      echo Counting to ten ...
+m4_dnl      sleep 10
+m4_dnl      spottasks=`netstat -an | grep :2060 | wc -l`
+m4_dnl    done
+m4_dnl }
+
 function startspotlight () {
-  spotlightdir=$PIPEROOT/env/spotlight/
-  spotlightjar=dbpedia-spotlight-0.7-jar-with-dependencies-candidates.jar
-  cd $spotlightdir
-  java -jar -Xmx8g $spotlightdir/$spotlightjar nl http://localhost:2060/rest  &
+   spotnl
 }
 
 function waitforspotlight () {
-   spottasks=0
-   while
-     [ $spottasks -eq 0 ]
-   do
-     echo Counting to ten ...
-     sleep 10
-     spottasks=`netstat -an | grep :2060 | wc -l`
-   done
+  sleep 1
 }
-
 
 waitabit()
 { ( RR=$RANDOM
@@ -165,21 +228,21 @@ function veilig () {
 
 
 
-function add_to_processed_list () {
-  passeer
-  echo `date %s` $1 $2 >>$BEING_PROCESSED_LIST
-  veilig
-}
-
-function remove_processed_file () {
-  key=$1
-  passeer
-    mv $BEING_PROCESSED_LIST $TEMP_BEING_PROCESSED_LIST
-    gawk '$2 == key { next } ; {print}' key=$key $TEMP_BEING_PROCESSED_LIST > $BEING_PROCESSED_LIST
-    rm $TEMP_BEING_PROCESSED_LIST
-  veilig
-#  stopos remove -p $POOL $key
-}
+m4_dnl function add_to_processed_list () {
+m4_dnl   passeer
+m4_dnl   echo `date %s` $1 $2 >>$BEING_PROCESSED_LIST
+m4_dnl   veilig
+m4_dnl }
+m4_dnl 
+m4_dnl function remove_processed_file () {
+m4_dnl   key=$1
+m4_dnl   passeer
+m4_dnl     mv $BEING_PROCESSED_LIST $TEMP_BEING_PROCESSED_LIST
+m4_dnl     gawk '$2 == key { next } ; {print}' key=$key $TEMP_BEING_PROCESSED_LIST > $BEING_PROCESSED_LIST
+m4_dnl     rm $TEMP_BEING_PROCESSED_LIST
+m4_dnl   veilig
+m4_dnl #  stopos remove -p $POOL $key
+m4_dnl }
 
 
 startspotlight
@@ -224,20 +287,29 @@ do
     do
       BTIME=`date +%s`
       echo $PROCNUM: Got file $INFILE
-      testprocess
+m4_dnl       testprocess
+      process_file
       if
-         [ -s $OUTFILE ]
+         [ -e $OUTFILE -a $(stat -c%s "$OUTFILE") -gt m4_min_outfilesize ]
       then
-         rm $PROCFILE
+         rm $INFILE
       else
-         movefile $PROCFILE $PROCTRAY $FAILTRAY
+         movefile $INFILE $INTRAY $FAILTRAY
       fi
+m4_dnl       if
+m4_dnl          [ -s $OUTFILE ]
+m4_dnl       then
+m4_dnl          rm $PROCFILE
+m4_dnl       else
+m4_dnl          movefile $PROCFILE $PROCTRAY $FAILTRAY
+m4_dnl       fi
 #      process_file $INFILE
 #     $SCRIPT < $INTRAY/$INFILE >$PROCTRAY/$INFILE
 #      mv $PROCTRAY/$INFILE $OUTTRAY
 #      removefromlist
       echo $PROCNUM: $PROCFILE processed
       ETIME=`date +%s`
+      stopos -p $STOPOSPOOL remove
 #      echo `stat --printf="%s" $INFIL`"	$(($ETIME - $BTIME))	$INFILE	$ALPCOMMAND" >> $BOOKKEEPFILE
     done
   ) &

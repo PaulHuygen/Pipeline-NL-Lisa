@@ -2,18 +2,27 @@
 if
   [ "$1" == "" ]
 then
-  echo 'usage: startit inputdir'
+  echo 'usage: start inputdir'
   exit 4
 fi
 TESTDATADIR=$1
 ROOT=$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )
 DATADIR=$ROOT/data
 INTRAY=$DATADIR/intray
-PROCTRAY=$DATADIR/proctray
 OUTTRAY=$DATADIR/outtray
+LOGTRAY=$DATADIR/logtray
+FAILTRAY=$DATADIR/failtray
+rm -rf $DATADIR
 mkdir -p $INTRAY
 mkdir -p $OUTTRAY
-mkdir -p $PROCTRAY
-cp $TESTDATADIR/* $INTRAY/
+mkdir -p $FAILTRAY
+mkdir -p $LOGTRAY
+m4 -P runit.m4 >runit
+chmod 775 ./runit
+m4 -P dutch-pipeline-job.m4 >dutch-pipeline-job
+chmod 775 ./dutch-pipeline-job
+m4 -P resetpool.m4 >resetpool
+chmod 775 ./resetpool
+cp -r $TESTDATADIR/* $INTRAY/
 echo start runit
 ./runit
