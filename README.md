@@ -69,5 +69,5 @@ Usually jobs are aborted while they are processing files. As a result,
 processing of those files will not be completed. Currently, now and
 then the stopos pool has to be re-generated. What
 is needed is a management module that runs on a regular basis
-(e.g. cron job) and that performs thins job.
+(e.g. cron job) and that performs this job.
 

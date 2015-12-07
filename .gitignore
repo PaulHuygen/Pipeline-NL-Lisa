@@ -1,9 +1,25 @@
 # .Gitignore
 
 *~
+*.log
+/auto/
+*.tgz
+nuweb/auto/
+nuweb/*.aux
+nuweb/*.bbl
+nuweb/*.blg
+nuweb/*.idx
+nuweb/*.ilg
+nuweb/*.ind
+nuweb/outline.org
+nuweb/*.out
+nuweb/*.tex
+nuweb/*.toc
+nuweb/Pipeline_NL_Lisa.w
+nuweb/m4_Pipeline_NL_Lisa.w
 
 dutch-pipeline-job
-dutch-pipeline-job.o*
-dutch-pipeline-job.e*
+dutch_pipeline_job.o*
+dutch_pipeline_job.e*
 data
 
