@@ -24,5 +24,6 @@ chmod 775 ./dutch-pipeline-job
 m4 -P resetpool.m4 >resetpool
 chmod 775 ./resetpool
 cp -r $TESTDATADIR/* $INTRAY/
+./resetpool
 echo start runit
 ./runit

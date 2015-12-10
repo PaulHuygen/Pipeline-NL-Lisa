@@ -1,5 +1,14 @@
 m4_define(m4_repoversion, `0.0.00')m4_dnl
 m4_dnl
+m4_dnl Settings that are likely to vary
+m4_dnl
+m4_define(m4_walltime, 30:00)m4_dnl   Max duration of a job
+m4_define(m4_filesperjob, `30')m4_dnl
+m4_define(m4_timeoutsecs, 1500)m4_dnl
+m4_define(m4_maxprocminutes, `30')m4_dnl
+m4_define(m4_logging, true)m4_dnl
+m4_define(m4_maxjoblogminutes, `144000')m4_dnl
+m4_dnl
 m4_dnl Titles
 m4_dnl
 m4_define(m4_progname, `Pipeline_NL_Lisa')m4_dnl
@@ -26,16 +35,15 @@ m4_define(m4_outdir, m4_adatadir/out)m4_dnl
 m4_define(m4_logdir, m4_adatadir/log)m4_dnl
 m4_define(m4_faildir, m4_adatadir/fail)m4_dnl
 m4_define(m4_procdir, m4_adatadir/proc)m4_dnl
+m4_define(m4_timeouterr, 124)m4_dnl
 m4_dnl
 m4_define(m4_stopospool, dppool)m4_dnl
 m4_define(m4_piperoot, `/home/phuijgen/nlp/nlpp')m4_dnl
-m4_define(m4_filesperjob, `30')m4_dnl
 m4_define(m4_memperprocess, `4')m4_dnl
 m4_define(m4_jobcountfile, m4_aprojroot/.jobcount)m4_dnl
 m4_define(m4_lockdir, m4_aprojroot/.lock)m4_dnl
 m4_define(m4_locktimeout, 10)m4_dnl
 m4_define(m4_jobname, dutch_pipeline_job)m4_dnl
-m4_define(m4_logging, true)m4_dnl
 m4_define(m4_logfile, m4_logdir/log)m4_dnl
 m4_define(m4_runittimefile, m4_aprojroot/.runittime)m4_dnl
 m4_define(m4_runit_deadtime, 15)m4_dnl
@@ -429,7 +437,6 @@ m4_define(m4_bindir, m4_projroot`/bin')m4_dnl     Binaries
 m4_dnl
 m4_dnl    miscellaneous
 m4_dnl
-m4_define(m4_walltime, 30:00)m4_dnl   Max duration of a job
 
 
 

@@ -210,6 +210,7 @@ local fromtray=$2
 local totray=$3
 local frompath=${file%/*}
 local topath=$totray${frompath##$fromtray}
+mkdir -p $topath
 mv $file $totray${file##$fromtray}
 }
 export -f movetotray
@@ -222,7 +223,8 @@ local fromtray=$2
 local totray=$3
 local frompath=${file%/*}
 local topath=$totray${frompath##$fromtray}
-mv $file $totray${file##fromtray}
+mkdir -p $topath
+cp $file $totray${file##fromtray}
 }
 export -f copytotray
 @| copytotray @}
@@ -250,8 +252,8 @@ A job performs the following:
 Generate the directories to store the files when they are not yet
 there.
 
-\subsubsection{Look whether there are input-files}
-\label{sec:lookforinput}
+\subsubsection{Count the files in the trays}
+\label{sec:bookkeeping}
 
 When the management script starts, it checks whether there is
 actually something to do.
@@ -267,8 +269,15 @@ then
   exit 4
 fi
 mkdir -p $outtray
+mkdir -p $failtray
 mkdir -p $logtray
 mkdir -p $proctray
+@< count files in tray @(intray@,incount@) @>
+@< count files in tray @(proctray@,proccount@) @>
+@< count files in tray @(failtray@,failcount@) @>
+@< count files in tray @(logtray@,logcount@) @>
+unreadycount=$((incount + $proccount))
+@< remove empty directories @>
 if
   [ ! "$(ls -A $intray)" ] &&  [ ! "$(ls -A $proctray)" ]
 then
@@ -276,9 +285,34 @@ then
   veilig
   exit
 fi
-@| infilesexist  @}
+@| infilesexist incount proccount failcount logcount @}
+
+@d count files in tray @{@%
+@2=`find $@1 -type f -print | wc -l`
+@| @}
+
+Remove empty directories in the intray and the proctray.
+@d remove empty directories @{@%
+find $intray -depth -type d -empty -delete
+find $proctray -depth -type d -empty -delete
+mkdir -p $intray
+mkdir -p $proctray
+@| @}
 
 
+While we are busy with file-bookkeeping, let us handle the job-logs
+too. When a job finishes it produces two files that contain standard
+output and standard error of the log. We remove logfiles that are more
+than a day old.
+
+@d remove old joblogs @{@%
+find $root -name "m4_jobname.[eo]*" -cmin +<!!>m4_maxjoblogminutes -delete
+@| @}
+
+
+
+\subsubsection{Generate filenames}
+\label{sec:generatefilenames}
 
 In the next section  we will see that Stopos stores the full paths to
 raw \NAF{}'s. When variable \verb|infile| contains the full path to a
@@ -288,6 +322,7 @@ annotated \NAF{} that will be created in the outtray:
 @d generate filenames @{@%
 filtrunk=${infile##$intray/}
 outfile=$outtray/${filtrunk}
+failfile=$failtray/${filtrunk}
 logfile=$logtray/${filtrunk}
 procfile=$proctray/${filtrunk}
 outpath=${outfile%/*}
@@ -390,7 +425,7 @@ rm $restorefilelist
 @| @}
 
 @d parameters @{@%
-maxproctime=15
+maxproctime=m4_maxprocminutes
 @|maxproctime @}
 
 To get a filename from Stopos perform:
@@ -475,11 +510,11 @@ function getfile() {
     [ ! "$infile" == "" ]
   then
     @< generate filenames @>
-@%    echo To process $INFILE
+@%    echo To process $infile
   fi
 }
 
-@| @}
+@| getfile @}
 
 \subsection{The pipeline}
 \label{sec:pipeline}
@@ -505,7 +540,7 @@ source m4_aprojroot/parameters
 OLDD=`pwd`
 TEMPDIR=`mktemp -t -d ontemp.XXXXXX`
 cd $TEMPDIR
-cat            | $pipebindir/tok          > tok.naf
+cat            | $pipebindir/tok           > tok.naf
 cat tok.naf    | $pipebindir/mor           > mor.naf
 cat mor.naf    | $pipebindir/nerc_conll02  > nerc.naf
 cat nerc.naf   | $pipebindir/wsd           > wsd.naf
@@ -526,6 +561,97 @@ rm -rf $TEMPDIR
 chmod 775 m4_aprojroot/pipenl
 @| @}
 
+Let us start a pipeline with more facilities.
+
+\begin{itemize}
+\item Create a log file that accepts the log info
+\end{itemize}
+
+@o m4_projroot/newpipenl @{@%
+#!/bin/bash
+source m4_aprojroot/parameters
+@< directories of the pipeline @>
+@< set utf-8 @>
+OLDD=`pwd`
+TEMPDIR=`mktemp -t -d ontemp.XXXXXX`
+cd $TEMPDIR
+echo `date +%s`: tok: >&2  
+cat | $pipebindir/tok >tok.naf
+@< nextmodule @(tok@,mor@,mor@) @>
+@< nextmodule @(mor@,nerc_conll02@,nerc@) @>
+@< nextmodule @(nerc@,wsd@,wsd@) @>
+@< nextmodule @(wsd@,ned@,ned@) @>
+@< nextmodule @(ned@,heideltime@,times@) @>
+@< nextmodule @(times@,onto@,onto@) @>
+@< nextmodule @(onto@,srl@,srl@) @>
+@< nextmodule @(srl@,evcoref@,ecrf@) @>
+@< nextmodule @(ecrf@,framesrl@,fsrl@) @>
+@< nextmodule @(fsrl@,dbpner@,dbpner@) @>
+@< nextmodule @(dbpner@,nomevent@,nomev@) @>
+@< nextmodule @(nomev@,postsrl@,psrl@) @>
+@< nextmodule @(psrl@,opinimin@,opinimin@) @>
+cat opinimin.naf
+@% echo Tokenizer: >&2
+@% cat            | $pipebindir/tok           > tok.naf
+@% echo : Morpho-syntactic parser >&2
+@% cat tok.naf    | $pipebindir/mor           > mor.naf
+@% echo Nerc (conll02): >&2
+@% cat mor.naf    | $pipebindir/nerc_conll02  > nerc.naf
+@% echo WSD: >&2
+@% cat nerc.naf   | $pipebindir/wsd           > wsd.naf
+@% echo NED: >&2
+@% cat wsd.naf    | $pipebindir/ned           > ned.naf
+@% echo Heideltime: >&2
+@% cat ned.naf    | $pipebindir/heideltime    > times.naf
+@% echo Onot-tagger: >&2
+@% cat times.naf  | $pipebindir/onto          > onto.naf
+@% echo SRL: >&2
+@% cat onto.naf   | $pipebindir/srl           > srl.naf
+@% echo Event Coreferencing: >&2
+@% cat srl.naf    | $pipebindir/evcoref       > ecrf.naf
+@% echo Frame SRL: >&2
+@% cat ecrf.naf   | $pipebindir/framesrl      > fsrl.naf
+@% echo DBPedia NER: >&2
+@% cat fsrl.naf   | $pipebindir/dbpner        > dbpner.naf
+@% echo Nominal Event coref.: >&2
+@% cat dbpner.naf | $pipebindir/nomevent      > nomev.naf
+@% echo Post SRL: >&2
+@% cat nomev.naf  | $pipebindir/postsrl       > psrl.naf
+@% echo Opinion miner: >&2
+@% cat psrl.naf   | $pipebindir/opinimin     
+cd $OLDD
+rm -rf $TEMPDIR 
+exit
+@| @}
+
+@d make scripts executable @{@%
+chmod 775 m4_aprojroot/newpipenl
+@| @}
+
+
+@%  1: Name infile
+@%  2: Name module
+@%  3: Name outfile
+
+If a module has been passed, proceed with the next module unless
+previous module failed. The follosing macro, \verb|nextmodule|, tests
+whether the last module has been successfull. If so, it writes a
+header to standard error (the logfile) and starts up next
+module. Otherwise, it exits the pipeline script with an error code.
+
+@d nextmodule @{@%
+err=$?
+if
+  [ $err -gt 0 ]
+then
+  cd $OLDD
+  rm -rf $TEMPDIR
+  exit $err
+fi
+echo `date +%s`: @2: >&2  
+cat @1.naf | $pipebindir/@2 >@3.naf 
+@| @}
+
 
 It is important that the computer uses utf-8 character-encoding.
 
@@ -541,8 +667,22 @@ Actually, we do not yet handle failed files separately.
 @d process infile @{@%
 movetotray $infile $intray $proctray
 mkdir -p $outpath
-cat $procfile | m4_aprojroot/pipenl >$outfile
+mkdir -p $logpath
+cat $procfile | timeout m4_timeoutsecs m4_aprojroot/newpipenl 2>$logfile  >$outfile
+exitstat=$?
+if
+  [ $exitstat -gt 0 ]
+then
+  if
+    [ $exitstat == m4_timeouterr ]
+  then
+    echo `date +%s`: Time-out >>$logfile
+  fi
+  movetotray $procfile $proctray $failtray
+  rm -f $outfile
+else
 rm $procfile
+fi
 stopos -p $stopospool remove
 @| @}
 
@@ -905,7 +1045,7 @@ piece will be used when it is already known that there are files
 waiting to be processed. So, there must be at least one job.
 
 @d submit jobs @{@%
-jobs_needed=$((unprocessedfilecount / $filesperjob))
+jobs_needed=$((unreadycount / $filesperjob))
 if
   [ $jobs_needed -lt 1 ]
 then
@@ -918,8 +1058,14 @@ then
    @< generate jobscript @>
    qsub -t 1-$jobs_to_be_submitted m4_aprojroot/m4_jobname
 fi 
-
+total_jobs=$jobs_needed
 @| jobs_needed jobs_to_be_submitted@}
+
+Update \verb|total_jobs|, in order to print a correct summary.
+
+@d submit jobs @{@%
+total_jobs=$jobs_needed
+@| @}
 
 
 @d generate jobscript @{@%
@@ -1402,17 +1548,16 @@ fi
 @o m4_projroot/runit @{@%
 #!/bin/bash
 source m4_aprojroot/parameters
+cd $root
+@< get runit options @>
 @< functions @>
 @< remove old lockdir @>
 runsingle
 @< init logfile @>
 @< load stopos module @>
 @< check/create directories @>
+@< remove old joblogs @>
 @< get stopos status @>
-waitingfilecount=`find $intray -type f -print | wc -l`
-readyfilecount=`find $outtray -type f -print | wc -l`
-procfilecount=`find $proctray -type f -print | wc -l`
-unprocessedfilecount=$((waitingfilecount + $procfilecount))
 @% @< do brief check of expired jobs @>
 @< count jobs @>
 if
@@ -1423,13 +1568,53 @@ else
    @< restore old procfiles @>
 fi
 @< submit jobs @>
-
 veilig
+if
+  [ $loud ]
+then
+  @< print summary @>
+fi
 @| @}
 
 @d make scripts executable @{@%
 chmod 775 m4_aprojroot/runit
 @| @}
+
+\subsection{Print a summary}
+\label{sec:printsummary}
+
+The \verb|runit| script prints a summary of the number of jobs and the
+number of files in the trays unless a \verb|-s| (silent) option is
+given. 
+
+Use \href{http://mywiki.wooledge.org/BashFAQ/035#getopts}{getopts} to
+unset the \verb|loud| flag if the \verb|-s| option is present.
+
+@d get runit options @{@%
+OPTIND=1
+export loud=0
+while getopts "s:" opt; do
+    case "$opt" in
+    s)  loud=
+        ;;
+    esac
+done
+shift $((OPTIND-1))
+@| @}
+
+Print the summary:
+
+@d print summary @{@%
+echo in         : $incount
+echo proc       : $proccount
+echo failed     : $failcount
+echo processed  : $((logcount - $failcount))
+echo jobs       : $total_jobs
+echo running    : $running_jobs
+@| @}
+
+
+
 
 
 @% Regenerate the stopos pool if it is empty but there are still input-files. 

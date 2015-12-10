@@ -3,7 +3,12 @@
 *~
 *.log
 /auto/
-*.tgz
+.fuse*
+.jobcount
+.runittime
+demoscript
+doit
+q*.tgz
 nuweb/auto/
 nuweb/*.aux
 nuweb/*.bbl
