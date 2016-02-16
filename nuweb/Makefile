@@ -105,8 +105,6 @@ $(DIRS) :
 
 source : Pipeline_NL_Lisa.w $(DIRS) $(NUWEB)
 	$(NUWEB) Pipeline_NL_Lisa.w
-	chmod 775 /home/phuijgen/nlp/Pipeline-NL-Lisa/pipenl
-	chmod 775 /home/phuijgen/nlp/Pipeline-NL-Lisa/newpipenl
 	chmod 775 /home/phuijgen/nlp/Pipeline-NL-Lisa/runit
 	chmod -R 775  ../bin/*
 	chmod -R 775  ../env/bin/*

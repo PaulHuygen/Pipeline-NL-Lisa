@@ -8,6 +8,8 @@ m4_define(m4_timeoutsecs, 1500)m4_dnl
 m4_define(m4_maxprocminutes, `30')m4_dnl
 m4_define(m4_logging, true)m4_dnl
 m4_define(m4_maxjoblogminutes, `144000')m4_dnl
+m4_define(m4_pipelineroot, /home/phuijgen/nlp/nlpp)m4_dnl
+m4_define(m4_pipelinescript, /home/phuijgen/usrlocal/bin/nlpp)m4_dnl
 m4_dnl
 m4_dnl Titles
 m4_dnl
@@ -37,18 +39,31 @@ m4_define(m4_faildir, m4_adatadir/fail)m4_dnl
 m4_define(m4_procdir, m4_adatadir/proc)m4_dnl
 m4_define(m4_timeouterr, 124)m4_dnl
 m4_dnl
-m4_define(m4_stopospool, dppool)m4_dnl
 m4_define(m4_piperoot, `/home/phuijgen/nlp/nlpp')m4_dnl
 m4_define(m4_memperprocess, `4')m4_dnl
 m4_define(m4_jobcountfile, m4_aprojroot/.jobcount)m4_dnl
-m4_define(m4_lockdir, m4_aprojroot/.lock)m4_dnl
-m4_define(m4_locktimeout, 10)m4_dnl
 m4_define(m4_jobname, dutch_pipeline_job)m4_dnl
 m4_define(m4_logfile, m4_logdir/log)m4_dnl
 m4_define(m4_runittimefile, m4_aprojroot/.runittime)m4_dnl
 m4_define(m4_runit_deadtime, 15)m4_dnl
 m4_define(m4_lisahost, lisa.surfsara.nl)m4_dnl
 m4_define(m4_spotlighthost, 130.37.53.38)m4_dnl
+m4_define(m4_spotlight_nl_port, 2060)m4_dnl
+m4_define(m4_spotlight_en_port, 2020)m4_dnl
+m4_define(m4_spotlight_directory, `/home/phuijgen/nlp/nlpp/env/spotlight')m4_dnl
+m4_dnl
+m4_dnl Stopos
+m4_dnl
+m4_define(m4_stopospool, dppool)m4_dnl
+m4_define(m4_min_stoposfiles, 500)m4_dnl
+
+m4_dnl
+m4_dnl Sematree
+m4_dnl
+m4_define(m4_sematree_script_location, /home/phuijgen/usrlocal/bin/sematree)m4_dnl
+m4_define(m4_aworkdir, m4_aprojroot/env)m4_dnl
+m4_define(m4_lockfile, mylock)m4_dnl
+m4_define(m4_locktimeout, 60)m4_dnl
 m4_dnl **************************************************
 
 m4_define(m4_amoddir, m4_aprojroot`/modules')m4_dnl     Modules
@@ -398,7 +413,6 @@ m4_dnl Spotlight
 m4_dnl
 m4_define(m4_spotlightball, spotlightnl.tgz)m4_dnl
 m4_define(m4_spotlight_host, `localhost')m4_dnl
-m4_define(m4_spotlight_nl_port, 2060)m4_dnl
 m4_define(m4_aspotlightdir, m4_aenvdir/spotlight)m4_dnl
 m4_define(m4_spotlighturl, http://spotlight.sztaki.hu)m4_dnl
 m4_define(m4_spotlight_download_url, m4_spotlighturl/downloads)m4_dnl
@@ -407,7 +421,6 @@ m4_define(m4_simple_spotlightjar, dbpedia-spotlight-`'m4_spotlightjarversion`'.j
 m4_define(m4_spotlightjar, dbpedia-spotlight-`'m4_spotlightjarversion`'-jar-with-dependencies-candidates.jar)m4_dnl
 m4_define(m4_spotlight_nl_model_ball, nl.tar.gz)m4_dnl
 m4_define(m4_spotlight_en_model_ball, en_2+2.tar.gz)m4_dnl
-m4_define(m4_spotlight_en_port, 2020)m4_dnl
 m4_define(m4_spotlight_snapdir, spotlight)m4_dnl
 m4_define(m4_spotlight_dir, spotlight)m4_dnl
 m4_dnl

@@ -13,6 +13,7 @@ m4_sinclude(local.m4)m4_dnl
 \newcommand{\thesubject}{m4_subject}
 \newcommand{\AWK}{\textsc{awk}}
 \newcommand{\CLTL}{\textsc{cltl}}
+\newcommand{\CPU}{\textsc{cpu}}
 \newcommand{\EHU}{\textsc{ehu}}
 \newcommand{\NAF}{\textsc{naf}}
 \newcommand{\NED}{\textsc{ned}}
@@ -38,13 +39,15 @@ m4_include(texinclusions.m4)m4_dnl
 \section{Introduction}
 \label{sec:Introduction}
 
-This document describes a system for large-scale linguistic annotation of Dutch
-documents, using supercomputer
+This document describes a system for large-scale linguistic annotation
+of documents, using supercomputer
 \href{https://userinfo.surfsara.nl/systems/lisa}{Lisa}. Lisa is a
 computer-system co-owned by the Vrije Universiteit Amsterdam. This
 document is especially useful for members of the Computational
 Lexicology and Terminology Lab (\CLTL{}) who have access to that
-computer.
+computer. Currently, the dopcuments to be processed have to be encoded
+in the \emph{NLP Annotation Format}
+(\href{https://github.com/newsreader/NAF}{\NAF}).
 
 The annotation of the documents will be performed by a ``pipeline''
 that has been set up in the
@@ -84,74 +87,105 @@ cp $xampledir/*.naf data/in/
 ./runit
 @| @}
 
-\section{Elements of the job}
-\label{sec:elements}
+@% \section{Elements of the job}
+@% \label{sec:elements}
 
 \subsection{How it works}
 \label{sec:how}
 
-The user stores a directory-tree that contains ``raw'' \NAF{} files in an ``intray'' and
-then starts a management script. The management script generates a
-list of the paths to the naf-files in the intray and stores this in a
-``Stopos pool'' (section~\ref{sec:filemanagement}).
-\href{https://userinfo.surfsara.nl/systems/lisa/software/stopos}{``Stopos''}
-enables parallel running jobs to get the filenames and precludes that
-two or more parallel processes obtain the same filename.
+\subsubsection{Moving files around}
+\label{sec:filestructure}
 
-The management script submits a number of jobs to the queue of the supercomputer.
+The \NAF{} files and the logfiles are stored in the following subdirectories of the \verb|data|:
 
-Eventually the jobs start on individual nodes, They are allowed to run
-for a certain duration, the ``wall time'', after which they are
-aborted. Each job starts a number of parallel processes. Each process is
-a cycle  of 1) obtain a filename from stopos; 3) annotate the file;
-3) store the resulting  \NAF{} in the outtray and remove the input-file from
-the .; 4) remove the filename from the stopos pool. 
+\begin{description}
+\item[in:] To store the input \NAF{}'s.
+\item[proc:] Temporary storage of the input files while they are being processed.
+\item[fail:] For the input \NAF's that could not be processed.
+\item[log:] For logfiles.
+\item[out] The annotated files appear here.
+\end{description}
 
+The user stores the raw \NAF{} files in directory \verb|data/in|. She
+may construct a structure with subdirectories in \verb|data/in| that
+contain the \NAF{} files. If she does that, the system copies this
+file-structure in the other subdirectories of \verb|data|.  Processing
+the files is performed by jobs. Before a job processes a document, it
+moves the document from \verb|in| to \verb|proc|, to indicate that
+processing this document has been started.
 
-If a cycle has been completed, the result is:
-\begin{enumerate}
-\item The number of files in the Stopos pool is reduced by one.
-\item The number of files in the intray is reduced by one.
-\item Either the failtray or the outtray contains a file with the
-  same name as the file that has been removed from the intray.
-\item There are entries in log-files
-\end{enumerate}
+When the job is not able to perform processing to completion
+(e.g. because it is aborted), the \NAF{} file remains in the
+\verb|proc| subdirectory. A management script moves \NAF{} of which
+processing has not been completed back to \verb|in|.
 
-A ``todo'' item is, to manage files that fail to be
-annotated. Currently this results in an unusable file in the outtray.
-
-If the cycle could not be completed, the result is:
-
-\begin{enumerate}
-\item The Stopos pool contains a file-name that cannot be accessed.
-\item The intray contains a file that will not be processed using the
-  current pool.
-\end{enumerate}
- 
-The management script has to be run periodically in order to
-regenerate the pool and to submit extra jobs to process the remaining files.
-
-Define parameters for the items that have been introduced in this section:
+While processing a document, a job generates log information and
+stores this in a log file with the same name as the input \NAF{} file
+in directory \verb|log|. If processing fails, the job moves the
+input \NAF{} file from \verb|proc| to
+\verb|fail|. Otherwise, the job stores the output \NAF{} file in
+\verb|out| and removes the input \NAF{} file from \verb|proc| 
 
 @d parameters @{@%
 export walltime=m4_walltime
 export root=m4_aprojroot
 export intray=m4_indir
+export proctray=m4_procdir
 export outtray=m4_outdir
 export failtray=m4_faildir
 export logtray=m4_logdir
 @| walltime root intray outtray failtray logtray @}
 
 
-\subsection{Still to be done}
-\label{sec:tobedone}
+\subsubsection{Managing the documents with Stopos}
+\label{sec:docmanagement}
 
-\begin{enumerate}
-\item Handle log files from the job system.
-\item Recognize when annotation fails.
-\end{enumerate}
+The processes in the jobs that do the work pick \NAF{} files from \verb|data/in|
+in order to process them. There must be a system that arranges that
+each \NAF{} file is picked up by only one job-process. To do this, we
+use the
+\href{https://userinfo.surfsara.nl/systems/lisa/software/stopos}{``Stopos''}
+system that is implemented in Lisa. A management script makes a list
+of the files in \verb|\data\in| and passes it to a ``stopos
+pool'' where the work processes can find them.
 
-\subsection{Set parameters}
+Periodically the management script moves unprocessed documents from
+\verb|data/proc| to \verb|data/in| and regenerate the filelist in the
+Stopos pool.
+
+A list of files to be processed is called a ``Stopos pool''. 
+
+@d parameters @{@%
+export stopospool=m4_stopospool
+@| stopospool @}
+
+Load the stopos module in a script:
+
+@d load stopos module @{@%
+module load stopos
+@| stopos module @}
+
+\subsubsection{Management script}
+\label{sec:managementscript}
+
+A management script \verb|runit| set the system to work and keep
+the system working until all input files have been processed until either
+successful completion or failure. The script must run periodically in
+order to restore unfinished input-files from \verb|data/proc| to
+\verb|data/in| and to submit enough jobs to the job-system.
+
+\subsubsection{Job script}
+\label{sec:jobscript}
+
+The management-script submits a Bash script as a job to the
+job-management system of Lisa. The script contains special parameters
+for the job system (e.g. to set the maximum processing time). It
+generate a number of parallel processes that do the work.
+
+To enhance flexibility the job script is generated from a template
+with the M4 pre-processor.
+
+\subsubsection{Set parameters}
 \label{sec:parameters}
 
 The system has several parameters that will be set as Bash variables
@@ -163,45 +197,51 @@ parameters values
 @| @}
 
 
+\section{Files}
+\label{sec:files}
 
-\subsection{Moving NAF-files around}
+Viewed from the surface, what the pipeline does is reading, creating,
+moving and deleting files. The input is a directory tree with \NAF{}
+files, the outputs are similar trees with \NAF{} files and log
+files. The system generates processes that run at the same time, reading files from the
+input tree. It must be made certain that each file is processed by
+only one process. This section describes and builds the directory
+trees and the ``stopos'' system that supplies paths to input \NAF{}
+files to the processes.
+
+\subsection{Move NAF-files around}
 \label{sec:filemoving}
 
-A job is a Bash script that finds raw \NAF{} files in the intray,
-feeds the files through an NLP pipeline and stores the result as
-\NAF{} file in the outtray. A complication is, that a job runs until
-it's ``wall-time'' has been expired, after which the operation system
-aborts the job. The input files that the job was annotating at that
-moment will not be completed, and stopos will not pass these files to
-other jobs. To solve this problem, before starting to annotate, the
-job moves the inputfile to a ``proc'' directory. The management script
-can move these files back to the input tray when it finds out that no
-job is processing them.
+The user may set up a structure with subdirectories to store the input
+\NAF{} files. This structure must be copied in the other data
+directories.
 
-@d parameters @{@%
-export proctray=m4_procdir
-@| proctray @}
+@% The following two macro's copy resp.{} move a file that is presented
+@% with it's full path from a source data directory to a similar path in a
+@% target data-directory. Arguments:
+@% 
+@% \begin{enumerate}
+@% \item Full path of sourcefile.
+@% \item Full path of source tray.
+@% \item Full path of target tray
+@% \end{enumerate}
+@% 
+@% @d copy file @{cp @1 $@3/${@1##$@2}@| @}
+@% 
+@% @d move file @{mv @1 $@3/${@1##$@2}@| @}
 
-In the pool the input nafs are stored by their full path. The
-following code scraps copy or move a file that is presented with
-it's full path from one tray to another
-tray. Arguments:
-
+The following bash functions copy resp.{} move a file that is presented
+with it's full path from a source data directory to a similar path in a
+target data-directory. Arguments:
 \begin{enumerate}
 \item Full path of sourcefile.
 \item Full path of source tray.
 \item Full path of target tray
 \end{enumerate}
 
-@d copy file @{cp @1 $@3/${@1##$@2}@| @}
-
-@d move file @{mv @1 $@3/${@1##$@2}@| @}
-
-Here follows the same functionality, bu now as Bash function. The
-functions are exported in order to be able to use them in \verb|xargs|
-constructions (See
-\href{http://unix.stackexchange.com/questions/158564/how-to-use-defined-function-with-xargs}{this
-  Stack-exchange item}.
+The functions can be used as
+\href{http://unix.stackexchange.com/questions/158564/how-to-use-defined-function-with-xargs}{arguments
+  in \texttt{xargs}}.
 
 @d functions @{@%
 function movetotray () {
@@ -213,7 +253,9 @@ local topath=$totray${frompath##$fromtray}
 mkdir -p $topath
 mv $file $totray${file##$fromtray}
 }
+
 export -f movetotray
+
 @| movetotray @}
 
 @d functions @{@%
@@ -226,48 +268,30 @@ local topath=$totray${frompath##$fromtray}
 mkdir -p $topath
 cp $file $totray${file##fromtray}
 }
+
 export -f copytotray
+
 @| copytotray @}
 
-
-To enable this moving-around of \NAF{}
-files, a management script has to perform the following:
-
-\begin{enumerate}
-\item Check whether there are raw NAF's to be processed.
-\item Generate the output-tray to store the processed \NAF{}'s
-\item Generate a Stopos pool with a list of the filenames of the NAF
-  files or update an existing Stopos pool.
-\end{enumerate}
-
-
-A job performs the following:
-
-\begin{enumerate}
-\item Obtain the path to a raw naf in the intray.
-\item Write a processed naf in a directory-tree on the outtray
-\item Move a failed inputfile to the fail-tree
-\end{enumerate}
-
-Generate the directories to store the files when they are not yet
-there.
-
-\subsubsection{Count the files in the trays}
+\subsection{Count the files and manage directories}
 \label{sec:bookkeeping}
 
-When the management script starts, it checks whether there is
-actually something to do.
+When the management script starts, it checks whether there is an input
+directory. If that is the case, it generates the other directories if
+they do not yet exist and then counts the files in the
+directories. The variable \verb|unreadycount| is for the total number
+of documents in the intray and in the proctray. 
 
 @d check/create directories @{@%
-infilesexist=1
-if
-  [ ! -d "$intray" ]
-then
-  echo "No input-files."
-  echo "Create $intray and fill it with raw NAF's."
-  veilig
-  exit 4
-fi
+@% infilesexist=1
+@% if
+@%   [ ! -d "$intray" ]
+@% then
+@%   echo "No input-files."
+@%   echo "Create $intray and fill it with raw NAF's."
+@%   veilig
+@%   exit 4
+@% fi
 mkdir -p $outtray
 mkdir -p $failtray
 mkdir -p $logtray
@@ -282,7 +306,7 @@ if
   [ ! "$(ls -A $intray)" ] &&  [ ! "$(ls -A $proctray)" ]
 then
   echo "Finished processing"
-  veilig
+@%   veilig
   exit
 fi
 @| infilesexist incount proccount failcount logcount @}
@@ -299,25 +323,12 @@ mkdir -p $intray
 mkdir -p $proctray
 @| @}
 
-
-While we are busy with file-bookkeeping, let us handle the job-logs
-too. When a job finishes it produces two files that contain standard
-output and standard error of the log. We remove logfiles that are more
-than a day old.
-
-@d remove old joblogs @{@%
-find $root -name "m4_jobname.[eo]*" -cmin +<!!>m4_maxjoblogminutes -delete
-@| @}
-
-
-
-\subsubsection{Generate filenames}
+\subsection{Generate pathnames}
 \label{sec:generatefilenames}
 
-In the next section  we will see that Stopos stores the full paths to
-raw \NAF{}'s. When variable \verb|infile| contains the full path to a
-raw \NAF{}, the following code derives the full path to the
-annotated \NAF{} that will be created in the outtray:
+When a job has obtained the name of a file that it has to process, it
+generates the full-pathnames of the files to be produced, i.e. the
+files in the proctray, the outtray or the failtray and the logtray:
 
 @d generate filenames @{@%
 filtrunk=${infile##$intray/}
@@ -330,103 +341,172 @@ procpath=${procfile%/*}
 logpath=${logfile%/*}
 @| filtrunk outfile logfile procfile outpath procpath logpath @}
 
+\subsection{Manage list of files in Stopos}
+\label{sec:manage-by-stopos}
 
+\subsubsection{Set up/reset pool}
+\label{sec:poolsetup}
 
+The processes obtain the names of the files to be processed from
+Stopos. Adding large amount of filenames to the stopos pool take much
+time, so this must be done sparingly. We do it as follows:
+\begin{enumerate}
+\item File \verb|old.filenames| contains the filenames that have been inserted
+in the Stopos pool.
+\item When there is no pool or the pool is empty, generate a new pool
+  and remove \verb|old.filenames|.
+\item  Move the files in the proctray that are not actually being
+processed back the intray. We know that these files are not being
+processed because either there are no running jobs or the files reside
+in the proctray for a longer time than jobs are allowed to run.
+\item Make file \verb|filenames| that lists all the files that are
+  currently in the intray.
+\item Remove from \verb|old.filenames| the names of the files that are
+  no longer in the intray. Hopefully they heve been processed or are
+  being processed.
+\item Make file \verb|new.filenames| that contains the names of the
+  files in the intray that are not present in
+  \verb|old.filenames|. These filenames have to be added to the pool.
+\item Add the files in \verb|new.filenames| to the pool.
+\item Add the content of \verb|new.filenames| to \verb|old.filenames|.
+\end{enumerate}
 
-\subsubsection{Stopos: file management}
-\label{sec:filemanagement}
+@d update the stopos pool @{@%
+cd $root
+if
+  [ $running_jobs -eq 0 ]
+then
+  @< move all procfiles to intray @>
+else
+  @< move old procfiles to intray @>
+fi
+find $intray -type f -print | sort >infilelist
+nr_of_infiles=`wc -l infilelist`
+if
+  [ $nr_of_infiles -gt 0 ]
+then
+  if
+    [ $total_jobs -eq 0 ]
+  then
+    @< (re)generate stopos pool @>
+    cp infilelist new.infilelist
+  else
+    @< update old.filelist @>
+    @< generate new.infilelist @>
+  fi
+  stopos -p $stopospool add new.filelist
+  @< add contents of new.filelist to old.filelist @>
+fi
+@|nr_of_infiles @}
 
-Stopos stores a set of parameters (in our case the full paths to
-\NAF{} files that have to be processed) in a named ``pool''. A process
-in a job can
-read a parameter value from the pool and the Stopos system makes sure that
-from that moment no other process is able to obtain that parameter value. When the job
-has finished processing the parameter value, it removes the parameter value from
-the pool.
-
-Set the name of the Stopos pool:
-
-@d parameters @{@%
-export stopospool=m4_stopospool
-@| stopospool @}
-
-Load the stopos module in a script:
-
-@d load stopos module @{@%
-module load stopos
-@| @}
-
-\subsubsection{Generate a Stopos pool}
-\label{sec:generate_pool}
-
-When the script is started for the first time, hopefully raw \NAF{}
-files are present in the intray, but there are no submitted jobs. When
-there are no jobs, generate a new Stopos pool. Otherwise, there ought
-to be a pool. To update the pool, restore files that resided for longer
-time in the proctray into the intray and re-introduce them in the pool.
-
-@% @d (re-)generate stopos pool @{@%
+@% Find out how many filenames are still in the Stopos pool. 
+@% If the Stopos pool does not exist, assign 0 files.
+@% 
+@% @d find out the number of files in the Stopos pool @{@%
+@% stopos -p $stopospool status
+@% result=$?
 @% if
-@%   [ $running_jobs -eq 0 ]
+@%   [ $result -gt 0 ]
 @% then
-@%   @< set up new stopos pool @>
+@%   stoposfiles=0
 @% else
-@%   @< restore old procfiles @>
+@%   stoposfiles=$STOPOS_PRESENT0
 @% fi
 @% @| @}
 
 
-@d set up new stopos pool @{@%
-@< move all procfiles to intray @>
-find $intray -type f -print >filelist
+When there are no jobs, we can re-generate the Stopos pool without
+risk to confuse running processes. So, in this case, remove the
+stopos pool if it exists, remove \verb|old.filelist| if it exists and
+generate a new pool.
+
+@d (re)generate stopos pool @{@%
 stopos -p $stopospool purge
 stopos -p $stopospool create
-stopos -p $stopospool add filelist
-stopos -p $stopospool status
+rm -f old.filelist
 @| @}
 
+
+Find the names of files that have been inserted in the pool and are
+still in the intray. Pre-requisite: \verb|filenames| and
+\verb|old.filenames| are both sorted. Replace \verb|old.filenames|
+with this list.
+
+@d update old.filelist @{@%
+comm -12 old.filelist filelist >old_current.filelist
+cp old_current.filelist old.filelist
+@| @}
+
+Find the names or the files that are in the intray but not yet in the
+pool. Replace \verb|new.filenames| with this list.
+
+@d generate new.infilelist @{@%
+comm -13 old.filelist filelist >new.filelist
+@| @}
+
+@d add contents of new.filelist to old.filelist @{@%
+cat new.filelist >>old.filelist
+sort old.filelist >old.filelist.sorted
+mv old.filelist.sorted old.filelist
+@| @}
+
+
+@% @< make list  @>
+@% 
+@% @< add new infiles to stopos @>
+@% 
+@% @< make a sorted list of files in the intray @>
+@% 
+@% @< find out the number of files in the Stopos pool @>
+@% if
+@%   [ $stoposfiles -lt m4_min_stoposfiles ]
+@% then
+@%   passeer
+@%   
+@%   find $intray -type f -print >filelist
+@%   stopos -p $stopospool purge
+@%   stopos -p $stopospool create
+@%   stopos -p $stopospool add filelist
+@%   stopos -p $stopospool status
+@%   veilig
+@% @| @}
+
+
+When no jobs are running, the files in the proctray will never be
+annotated, so move them back to the intray.
 
 @d move all procfiles to intray @{@%
 find $proctray -type f -print | xargs -iaap  bash -c 'movetotray aap $proctray $intray'
 @| @}
 
+However, when there are running jobs, move only the files that reside
+longer in the proctray than jobs can run.
 
-Move files that reside longer than \verb|maxproctime| minutes back to
-the intray. This works as follows:
-
-\begin{enumerate}
-\item function \verb|restoreprocfile| moves a file back to the intray
-  and adds the path in the intray to a list in file \verb|restorefiles|.
-\item The Unix function \verb|find| the old procfiles to function
-  \verb|restoreprocfile|.
-\item When the old procfiles have been collected, the filenames in
-  \verb|restorefiles| are passed to Stopos.
-\end{enumerate}
-
-@d functions @{@%
-function restoreprocfile {
-  procf=$1
-  filelist=$2
-  inf=$intray/${procfile##$proctray}
-  echo $inf >>$filelist
-  movetotray $procf $proctray $intray
-}
-export -f restoreprocfile
-@| restoreprocfile @}
-
-
-
-@d restore old procfiles @{@%
-restorefilelist=`mktemp -t restore.XXXXXX`
-find $proctray -type f -cmin +$maxproctime -print | \
-   xargs -iaap  bash -c 'restoreprocfile aap $restorefilelist'
-stopos -p $stopospool add $restorefilelist
-rm $restorefilelist
+@d move old procfiles to intray @{@%
+find $proctray -type f -cmin +$maxproctime -print | xargs -iaap  bash -c 'movetotray aap $proctray $intray'
 @| @}
 
 @d parameters @{@%
 maxproctime=m4_maxprocminutes
 @|maxproctime @}
+
+@% @d add new infiles to stopos @{@%
+@% find $intray -type f -print | sort >filelist
+@% if
+@%   [ -e old.filelist ]
+@% then
+@%   diff old.filelist filelist | \
+@%      gawk '/^> / {gsub(/^> /, ""); print}' \
+@%      >new.filelist  
+@% else
+@%   cp filelist newfilelist
+@% fi
+@% 
+@% @| @}
+
+
+\subsubsection{Get a filename from the pool}
+\label{sec:getfilename}
 
 To get a filename from Stopos perform:
 
@@ -440,22 +520,11 @@ When this instruction is successfull, it sets variable
 \verb|STOPOS_VALUE|.
 
 Get next input-file from stopos and put its full path in variable
-\verb|infile|. If Stopos is empty, try to recover old procfiles and
-try again. If Stopos is still empty, undefine \verb|infile|.
+\verb|infile|. If Stopos is empty, put an empty string in
+\verb|infile|.
 
 @d get next infile from stopos @{@%
 stopos -p $stopospool next
-@% if
-@%    [ ! "$STOPOS_RC" == "OK" ]
-@%  then
-@%   waitingfilecount=`find $intray -type f -print | wc -l`
-@%   if
-@%     [ $waitingfilecount -gt 0 ]
-@%   then
-@%      @< restore old procfiles @>
-@%      stopos -p $stopospool next
-@%   fi
-@% fi
 if
   [ "$STOPOS_RC" == "OK" ]
 then
@@ -466,32 +535,6 @@ fi
 @| @}
 
 
-
-\subsubsection{Get Stopos status}
-\label{sec:stopos-state}
-
-Find out whether the stopos pool exists and create it if that is not
-the case.
-
-Find out how many filenames are still present in the Stopos
-pool. Store the number of input-files that have not yet been given to
-a processing job in variable \verb|untouched_files| and the number of
-files that have been given to a processing job but have not yet been
-finished in variable \verb|busy_files|.
-
-@d get stopos status @{@%
-stopos pools
-if [ -z "`echo $STOPOS_VALUE | grep $stopospool `" ]
-then 
-   stopos -p $stopospool create
-fi
-stopos -p $stopospool status
-untouched_files=$STOPOS_PRESENT0
-busy_files=$STOPOS_PRESENT
-@| @}
-
-
-
 \subsubsection{Function to get a filename from Stopos}
 \label{sec:getfile-function}
 
@@ -499,9 +542,9 @@ busy_files=$STOPOS_PRESENT
 The following function, getfile, reads a file from stopos, puts it in
 variable \verb|infile| and sets the
 paths to the outtray, the logtray and the failtray. When the Stopos
-pool turns out to be empty, variable is made empty.
+pool turns out to be empty, the variable is made empty.
 
-@d  function getfile @{@%
+@d  functions in the jobfile @{@%
 function getfile() {
   infile=""
   outfile=""
@@ -516,182 +559,191 @@ function getfile() {
 
 @| getfile @}
 
-\subsection{The pipeline}
-\label{sec:pipeline}
+@%    \subsubsection{Get Stopos status}
+@% \la@% bel{sec:stopos-state}
+@% 
+@% Find out whether the stopos pool exists and create it if that is not
+@% the case.
+@% 
+@% When the stopos pool exists, find out how many filenames it lists and
+@% how many of these files are still ``untouched'' (not claimed by any
+@% process). 
+@% 
+@% @d get stopos status @{@%
+@% stopos pools
+@% if [ -z "`echo $STOPOS_VALUE | grep $stopospool `" ]
+@% then 
+@%    stopos -p $stopospool create
+@% fi
+@% stopos -p $stopospool status
+@% untouched_files=$STOPOS_PRESENT0
+@% busy_files=$STOPOS_PRESENT
+@% @| @}
+@% 
+@% @d remove the infile from the stopos pool @{@%
+@% stopos -p $stopospool remove
+@% @| @}
+@% 
 
-The raw \NAF{}'s will be processed with the Dutch Newsreader
-Pipeline. It has been installed on the account \texttt{phuijgen} on
-Lisa. The installation has been performed using the Github repository
-\href{https://github.com/PaulHuygen/nlpp}.
+@% To enable this moving-around of \NAF{}
+@% files, a management script has to perform the following:
+@% 
+@% \begin{enumerate}
+@% \item Check whether there are raw NAF's to be processed.
+@% \item Generate the output-tray to store the processed \NAF{}'s
+@% \item Generate a Stopos pool with a list of the filenames of the NAF
+@%   files or update an existing Stopos pool.
+@% \end{enumerate}
+@% 
+@% 
+@% A job performs the following:
+@% 
+@% \begin{enumerate}
+@% \item Obtain the path to a raw naf in the intray.
+@% \item Write a processed naf in a directory-tree on the outtray
+@% \item Move a failed inputfile to the fail-tree
+@% \end{enumerate}
+@% 
+@% Generate the directories to store the files when they are not yet
+@% there.
 
-@d directories of the pipeline @{@%
-export piperoot=m4_piperoot
-export pipebindir=m4_piperoot/bin
-@| @}
+\section{Jobs}
+\label{sec:jobs}
 
-The following script processes a raw \NAF{} from standard in and
-produces the result on standard out.:
-
-@o m4_projroot/pipenl @{@%
-#!/bin/bash
-source m4_aprojroot/parameters
-@< directories of the pipeline @>
-@< set utf-8 @>
-OLDD=`pwd`
-TEMPDIR=`mktemp -t -d ontemp.XXXXXX`
-cd $TEMPDIR
-cat            | $pipebindir/tok           > tok.naf
-cat tok.naf    | $pipebindir/mor           > mor.naf
-cat mor.naf    | $pipebindir/nerc_conll02  > nerc.naf
-cat nerc.naf   | $pipebindir/wsd           > wsd.naf
-cat wsd.naf    | $pipebindir/ned           > ned.naf
-cat ned.naf    | $pipebindir/heideltime    > times.naf
-cat times.naf  | $pipebindir/onto          > onto.naf
-cat onto.naf   | $pipebindir/srl           > srl.naf
-cat srl.naf    | $pipebindir/evcoref       > ecrf.naf
-cat ecrf.naf   | $pipebindir/framesrl      > fsrl.naf
-cat fsrl.naf   | $pipebindir/dbpner        > dbpner.naf
-cat dbpner.naf | $pipebindir/nomevent      > nomev.naf
-cat nomev.naf  | $pipebindir/postsrl       > psrl.naf
-cat psrl.naf   | $pipebindir/opinimin     
-rm -rf $TEMPDIR 
-@| @}
-
-@d make scripts executable @{@%
-chmod 775 m4_aprojroot/pipenl
-@| @}
-
-Let us start a pipeline with more facilities.
-
-\begin{itemize}
-\item Create a log file that accepts the log info
-\end{itemize}
-
-@o m4_projroot/newpipenl @{@%
-#!/bin/bash
-source m4_aprojroot/parameters
-@< directories of the pipeline @>
-@< set utf-8 @>
-OLDD=`pwd`
-TEMPDIR=`mktemp -t -d ontemp.XXXXXX`
-cd $TEMPDIR
-echo `date +%s`: tok: >&2  
-cat | $pipebindir/tok >tok.naf
-@< nextmodule @(tok@,mor@,mor@) @>
-@< nextmodule @(mor@,nerc_conll02@,nerc@) @>
-@< nextmodule @(nerc@,wsd@,wsd@) @>
-@< nextmodule @(wsd@,ned@,ned@) @>
-@< nextmodule @(ned@,heideltime@,times@) @>
-@< nextmodule @(times@,onto@,onto@) @>
-@< nextmodule @(onto@,srl@,srl@) @>
-@< nextmodule @(srl@,evcoref@,ecrf@) @>
-@< nextmodule @(ecrf@,framesrl@,fsrl@) @>
-@< nextmodule @(fsrl@,dbpner@,dbpner@) @>
-@< nextmodule @(dbpner@,nomevent@,nomev@) @>
-@< nextmodule @(nomev@,postsrl@,psrl@) @>
-@< nextmodule @(psrl@,opinimin@,opinimin@) @>
-cat opinimin.naf
-@% echo Tokenizer: >&2
-@% cat            | $pipebindir/tok           > tok.naf
-@% echo : Morpho-syntactic parser >&2
-@% cat tok.naf    | $pipebindir/mor           > mor.naf
-@% echo Nerc (conll02): >&2
-@% cat mor.naf    | $pipebindir/nerc_conll02  > nerc.naf
-@% echo WSD: >&2
-@% cat nerc.naf   | $pipebindir/wsd           > wsd.naf
-@% echo NED: >&2
-@% cat wsd.naf    | $pipebindir/ned           > ned.naf
-@% echo Heideltime: >&2
-@% cat ned.naf    | $pipebindir/heideltime    > times.naf
-@% echo Onot-tagger: >&2
-@% cat times.naf  | $pipebindir/onto          > onto.naf
-@% echo SRL: >&2
-@% cat onto.naf   | $pipebindir/srl           > srl.naf
-@% echo Event Coreferencing: >&2
-@% cat srl.naf    | $pipebindir/evcoref       > ecrf.naf
-@% echo Frame SRL: >&2
-@% cat ecrf.naf   | $pipebindir/framesrl      > fsrl.naf
-@% echo DBPedia NER: >&2
-@% cat fsrl.naf   | $pipebindir/dbpner        > dbpner.naf
-@% echo Nominal Event coref.: >&2
-@% cat dbpner.naf | $pipebindir/nomevent      > nomev.naf
-@% echo Post SRL: >&2
-@% cat nomev.naf  | $pipebindir/postsrl       > psrl.naf
-@% echo Opinion miner: >&2
-@% cat psrl.naf   | $pipebindir/opinimin     
-cd $OLDD
-rm -rf $TEMPDIR 
-exit
-@| @}
-
-@d make scripts executable @{@%
-chmod 775 m4_aprojroot/newpipenl
-@| @}
+\subsection{Manage the jobs}
+\label{sec:manage-jobs}
 
 
-@%  1: Name infile
-@%  2: Name module
-@%  3: Name outfile
+The management script submits jobs when necessary. It needs to do the
+following:
 
-If a module has been passed, proceed with the next module unless
-previous module failed. The follosing macro, \verb|nextmodule|, tests
-whether the last module has been successfull. If so, it writes a
-header to standard error (the logfile) and starts up next
-module. Otherwise, it exits the pipeline script with an error code.
+\begin{enumerate}
+\item Count the number of submitted and running jobs.
+\item Count the number of documents that still have to be processed.
+\item Calculate the number of extra jobs that have to be submitted.
+\item Submit the extra jobs.
+\end{enumerate}
 
-@d nextmodule @{@%
-err=$?
-if
-  [ $err -gt 0 ]
-then
-  cd $OLDD
-  rm -rf $TEMPDIR
-  exit $err
-fi
-echo `date +%s`: @2: >&2  
-cat @1.naf | $pipebindir/@2 >@3.naf 
-@| @}
+Find out how many submitted jobs there are and how many of them are
+actually running. Lisa supplies an instruction \verb|showq| that
+produces a list of running and waiting jobs. Extract the summaries of
+the numbers of running jobs and the total number of jobs.
 
+@d count jobs @{@%
+joblist=`mktemp -t jobrep.XXXXXX`
+rm -rf $joblist
+showq -u $USER | tail -n 1 > $joblist
+running_jobs=`cat $joblist | gawk '
+    { match($0, /Active Jobs:[[:blank:]]*([[:digit:]]+)[[:blank:]]*Idle/, arr)
+      print arr[1]
+    }'`
+total_jobs=`cat $joblist | gawk '
+    { match($0, /Total Jobs:[[:blank:]]*([[:digit:]]+)[[:blank:]]*Active/, arr)
+      print arr[1]
+    }'`
+rm $joblist
+@| running_jobs total_jobs @}
 
-It is important that the computer uses utf-8 character-encoding.
-
-@d set utf-8 @{@%
-export LANG=en_US.utf8
-export LANGUAGE=en_US.utf8
-export LC_ALL=en_US.utf8
-@| @}
-
-
-Actually, we do not yet handle failed files separately. 
-
-@d process infile @{@%
-movetotray $infile $intray $proctray
-mkdir -p $outpath
-mkdir -p $logpath
-cat $procfile | timeout m4_timeoutsecs m4_aprojroot/newpipenl 2>$logfile  >$outfile
-exitstat=$?
-if
-  [ $exitstat -gt 0 ]
-then
-  if
-    [ $exitstat == m4_timeouterr ]
-  then
-    echo `date +%s`: Time-out >>$logfile
-  fi
-  movetotray $procfile $proctray $failtray
-  rm -f $outfile
-else
-rm $procfile
-fi
-stopos -p $stopospool remove
-@| @}
-
-Select a proper spotlighthost:
-
+Currently we aim at one job per m4_filesperjob waiting files.
 @d parameters @{@%
-export spotlighthost=m4_spotlighthost
-@| spotlighthost @}
+filesperjob=m4_filesperjob
+@| @}
 
+Calculate the number of jobs that have to be submitted. Note that this
+code-piece will be used when it is already known that there are files
+waiting to be processed. So, there must be at least one job.
+
+@d determine how many jobs have to be submitted @{@%
+jobs_needed=$((unreadycount / $filesperjob))
+if
+  [ $jobs_needed -lt 1 ]
+then
+  jobs_needed=1
+fi
+jobs_to_be_submitted=$((jobs_needed - $total_jobs))
+@| @}
+
+Submits jobs when necessary:
+
+@d submit jobs when necessary @{@%
+@< determine how many jobs have to be submitted @>
+if
+  [ \$jobs_to_be_submitted -gt 0 ]
+then
+   @< submit jobs @(\$jobs_to_be_submitted@) @>
+fi 
+total_jobs=$total_jobs + $jobs_to_be_submitted
+@| jobs_needed jobs_to_be_submitted@}
+
+\subsection{Generate and submit jobs}
+\label{sec:generate-jobs}
+
+A job needs a script that tells what to do. The job-script is a Bash
+script with the recipe to be executed, supplemented with instructions
+for the job control system of the host. In order to perform the Art of
+Making Things Unccesessary Complicated, we have a template from which
+the job-script can be generated with the
+\href{http://www.gnu.org/software/m4/m4.html}{M4 pre-processor}.
+
+Generate job-script template \verb|job.m4| as follows:
+\begin{enumerate}
+\item Open the job-script with the wall-time parameter (the maximum duration that is allowed
+for the job).
+\item Add an instruction to change the M4 ``quote'' characters.
+\item Add the M4 template \verb|m4_jobname|.
+\end{enumerate}
+
+Process the template with \texttt{M4}.
+
+
+@d generate jobscript @{@%
+echo "m4_<!!>define(m4_<!!>walltime, $walltime)m4_<!!>dnl" >job.m4
+m4_changequote(<![!>,<!]!>)m4_dnl
+echo 'm4_[]changequote(`<!'"'"',`!>'"'"')m4_[]dnl' >>job.m4
+m4_changequote([<!],[!>])m4_dnl
+cat m4_jobname<!!>.m4 >>job.m4
+cat job.m4 | m4 -P >m4_jobname
+# rm job.m4
+@| @}
+
+
+Submit the jobscript. The argument is the number of times that the
+jobscript has to be submitted.
+
+@d submit jobs @{@%
+ @< generate jobscript @>
+ qsub -t 1-@1 m4_aprojroot/m4_jobname
+@| @}
+
+\section{Logging}
+\label{sec:logging}
+
+There are three kinds of log-files:
+
+\begin{enumerate}
+\item Every job generates two logfiles in the directory from which it
+  has been submitted (job logs).
+\item Every job writes the time that it starts or finishes processing
+  a naf in a \emph{time log}.
+\item For every \NAF{} a file is generated in the log directory. This
+  file contains the standard error output of the modules that
+  processed the file.
+\end{enumerate}
+
+
+\subsection{Job logs}
+\label{sec:joblogs}
+
+
+While we are busy with file-bookkeeping, let us handle the job-logs
+too. When a job finishes it produces two files that contain standard
+output and standard error of the log. We remove logfiles that are more
+than a day old. Job-logs have the same name as the job. The extension
+begins with character \verb|o| (output) or  \verb|e|, followed by a number.
+
+@d remove old joblogs @{@%
+find $root -name "m4_jobname.[eo]*" -cmin +<!!>m4_maxjoblogminutes -delete
+@| @}
 
 
 \subsection{Time log}
@@ -708,71 +760,119 @@ export timelogfile=m4_logdir/timelog
 echo `date +%s`: @1 >> $timelogfile
 @| @}
 
+@d log that the job starts @{@%
+@< add timelog entry @(Start job $jobname@) @>
+@| @}
 
-\subsection{General log mechanism}
-\label{sec:generallog}
-
-Write to a log file if logging is set to true.
-
-@d init logfile @{@%
-LOGGING=m4_logging
-LOGFIL=m4_logfile
-PROGNAM=@1
-@| LOGGING LOGFIL @}
-
-@d write log @{@%
-if LOGGING=true
-then
-  echo `date`";" \$PROGNAM":" @1 >>\$LOGFIL
-fi
+@d log that the job finishes @{@%
+@< add timelog entry @(Finish job $jobname@) @>
 @| @}
 
 
 
-\subsection{Parallel processes}
-\label{sec:parallel}
 
-When a job runs, it determines how many resources it has (\textsc{cpu}
-nodes, memory) and from that it deterines how many parallel processed
-it can start up.
+@% \subsubsection{Stopos: file management}
+@% \label{sec:filemanagement}
+@% 
+@% Stopos stores a set of parameters (in our case the full paths to
+@% \NAF{} files that have to be processed) in a named ``pool''. A process
+@% in a job can
+@% read a parameter value from the pool and the Stopos system makes sure that
+@% from that moment no other process is able to obtain that parameter value. When the job
+@% has finished processing the parameter value, it removes the parameter value from
+@% the pool.
 
-@d start parallel processes @{@%
-@< determine amount of memory and nodes @>
-@< determine number of parallel processes @>
-procnum=0
-for ((i=1 ; i<=$maxprocs ; i++))
-do
-  ( procnum=$i
-    while
-       getfile
-       [ ! -z $infile ]
-    do
-@%        @< process 1 invokes runit @>
-        @< add timelog entry @(Start $infile@) @>
-       @< process infile @>
-       @< add timelog entry @(Finished $infile@) @>
+@% \subsubsection{Generate a Stopos pool}
+@% \label{sec:generate_pool}
+@% 
+@% When the script is started for the first time, hopefully raw \NAF{}
+@% files are present in the intray, but there are no submitted jobs. When
+@% there are no jobs, generate a new Stopos pool. Otherwise, there ought
+@% to be a pool. To update the pool, restore files that resided for longer
+@% time in the proctray into the intray and re-introduce them in the pool.
 
-    done
-  )&
-done
+@% @d (re-)generate stopos pool @{@%
+@% if
+@%   [ $running_jobs -eq 0 ]
+@% then
+@%   @< set up new stopos pool @>
+@% else
+@%   @< restore old procfiles @>
+@% fi
+@% @| @}
 
-@| procnum @}
+
+@% Move files that reside longer than \verb|maxproctime| minutes back to
+@% the intray. This works as follows:
+@% 
+@% \begin{enumerate}
+@% \item function \verb|restoreprocfile| moves a file back to the intray
+@%   and adds the path in the intray to a list in file \verb|restorefiles|.
+@% \item The Unix function \verb|find| the old procfiles to function
+@%   \verb|restoreprocfile|.
+@% \item When the old procfiles have been collected, the filenames in
+@%   \verb|restorefiles| are passed to Stopos.
+@% \end{enumerate}
+@% 
+@% @d functions @{@%
+@% function restoreprocfile {
+@%   procf=$1
+@%   filelist=$2
+@%   inf=$intray/${procfile##$proctray}
+@%   echo $inf >>$filelist
+@%   movetotray $procf $proctray $intray
+@% }
+@% export -f restoreprocfile
+@% @| restoreprocfile @}
+
+
+
+@% @d restore old procfiles @{@%
+@% restorefilelist=`mktemp -t restore.XXXXXX`
+@% find $proctray -type f -cmin +$maxproctime -print | \
+@%    xargs -iaap  bash -c 'restoreprocfile aap $restorefilelist'
+@% stopos -p $stopospool add $restorefilelist
+@% rm $restorefilelist
+@% @| @}
+
+
+
+\section{Processes}
+\label{sec:processes}
+
+A job runs in computer that is part of the Lisa supercomputer. The
+computer has a \CPU{} with multiple cores. To use the cores
+effectively, the job generates parallel processes that do the
+work. The number of processes to be generated depends on the number of
+cores and the amount of memory that is available.
+
+\subsection{Calculate the number of parallel processes to be launched}
+\label{sec:processes_to_be_launched}
+
+The stopos module, that we use to synchronize file management,
+supplies the instructions \verb|sara-get-num-cores| and
+\verb|sara-get-mem-size| that return the number of cores resp. the
+amount of memory of the computer that hosts the job. \textbf{Note}
+that the stopos module has to be loaded before the following macro can
+be executed succesfully.
 
 @d determine amount of memory and nodes @{@%
 export ncores=`sara-get-num-cores`
 #export MEMORY=`head -n 1 < /proc/meminfo | gawk '{print $2}'`
 export memory=`sara-get-mem-size`
-@| @}
+@| memory ncores @}
 
 
 We want to run as many parallel processes as possible, however we do
 want to have at least one node per process and at least an amount of
-\verb|memchunk| GB of memory per process.
+\verb|m4_memperprocess| GB of memory per process.
 
 @d parameters @{@%
 mem_per_process=m4_memperprocess
 @| @}
 
+Calculate the number of processes to be launched and write the result
+in variable \verb|maxprogs|.
 
 @d  determine number of parallel processes @{@%
 export memchunks=$((memory / mem_per_process))
@@ -783,25 +883,492 @@ then
 else
   maxprocs=ncores
 fi
+@| maxprogs @}
+
+
+\subsection{Start parallel processes}
+\label{sec:start_processes}
+
+@d start parallel processes @{@%
+@< determine amount of memory and nodes @>
+@< determine number of parallel processes @>
+procnum=0
+for ((i=1 ; i<=$maxprocs ; i++))
+do
+  ( procnum=$i
+    @< perform the processing loop @>
+  )&
+done
+
+@| procnum @}
+
+In a loop, the process obtains the path to  an input \NAF{} and
+processes it.  
+
+@d perform the processing loop @{@%
+while
+   getfile
+   [ ! -z $infile ]
+do
+@%        @< process 1 invokes runit @>
+   @< add timelog entry @(Start $infile@) @>
+   @< process infile @>
+   @< add timelog entry @(Finished $infile@) @>
+
+done
 @| @}
 
 
-@% @d process 1 invokes runit @{@%
+\section{Apply the pipeline}
+\label{sec:pipeline}
+
+This section finally deals with the essential purpose of this
+software: to annotate a document with the modules of the pipeline.
+
+The pipeline is installed in directory \verb|m4_pipelineroot|. For
+each of the modules there is a script in subdirectory \verb|bin|.
+
+@d parameters @{@%
+export pipelineroot=m4_pipelineroot
+export BIND=$pipelineroot/bin
+@| @}
+
+
+
+
+\subsection{Spotlight server}
+\label{sec:spotlightserver}
+
+Some of the pipeline modules need to consult a \emph{Spotlight server}
+that provides information from DBPedia about named entities. If it is
+possible, use an external server, otherwise start a server on the host
+of the job. We need two Spotlight servers, one for English and the
+other for Dutch. We expect that we can find spotlight servers on host
+\verb|m4_spotlighthost|, port m4_spotlight_nl_port for Dutch and
+m4_spotlight_en_port for English. If it turns out that we cannot
+access these servers, we have to build Spotlightserver on the local
+host.
+
+@% @d check/start spotlight @{@%
+@% spothost_nl=check_start_spotlight "nl"
+@% spothost_en=check_start_spotlight "en"
+@% @| @}
+
+
+
+@d functions in the jobfile @{@%
+function check_start_spotlight {
+  language=$1
+  if
+    [ language == "nl" ]
+  then
+    spotport=m4_spotlight_nl_port
+  else
+    spotport=m4_spotlight_en_port
+  fi
+  spothost = m4_spotlighthost
+  @< check spotlight on@($spothost@,$spotport@) @>
+  if
+    [ $spotlightrunning -ne 0 ]
+  then
+    start_spotlight_on_localhost $language $spotport
+    spothost="localhost"
+  fi
+  return $spothost
+}
+@| @}
+
+
+@d functions in the jobfile @{@%
+function start_spotlight_on_localhost {
+   language=$1
+   port=$2
+   spotlightdirectory=m4_spotlight_directory
+   spotlightjar=dbpedia-spotlight-0.7-jar-with-dependencies-candidates.jar
+   if
+     [ "$language" == "nl" ]
+   then
+     spotresource=$spotlightdirectory"/nl"
+   else
+     spotresource=$spotlightdirectory"/en_2+2"
+   fi
+   java -Xmx8g \
+        -jar $spotlightdirectory/$spotlightjar \
+        $spotresource \ 
+        http://localhost:$port/rest \
+   &
+@| @}
+
+@d check spotlight on @{@%
+exec 6<>/dev/tcp/@1/@2
+spotlightrunning=$?
+exec 6<&-
+exec 6>&-
+@| @}
+
+\subsection{Language of the document}
+\label{sec:language}
+
+Our pipeline is currently bi-lingual. Only documents in Dutch or
+English can be annotated. The language is specified as argument in the
+\verb|NAF| tag. The pipeline installation contains a script that
+returns the language of the document in the \NAF{}. Put the language
+in variable \verb|naflang|.
+
+Select the model that the Nerc module has to use, dependent of the language.
+
+@d retrieve the language of the document  @{@%
+naflang=`cat @1 | m4_pipelineroot/bin/langdetect`
+export naflang
+#
+if
+  [ "$naflang" == "nl" ]
+then
+  export nercmodel=nl/nl-clusters-conll02.bin
+else
+  export nercmodel=en/en-newsreader-clusters-3-class-muc7-conll03-ontonotes-4.0.bin
+fi
+@| naflang @}
+
+
+
+
+\subsection{Apply a module on a NAF file}
+\label{sec:apply_module}
+
+For each NLP module, there is a script in the \verb|bin| subdirectory
+of the pipeline-installation. This script reads a \NAF{} file from
+standard in and produces annotated \NAF{}-encoded document on standard
+out, if all goes well. The exit-code of the module-script can be used
+as indication of the success of the annotation.
+
+To prevent that modules are applied on the result of a failed
+annotation by a previous module, the exit code will be stored in
+variable \verb|moduleresult|. 
+
+The following function applies a module on the input naf file, but
+only if variable \verb|moduleresult| is equal to zero. If the
+annotation fails, the function writes a fail message to standard error
+and it sets variable \verb|failmodule| to the name of the module that
+failed. In this way the modules can easily be concatenated to annotate
+the input document and to stop processing with a clear message when a
+module goes wrong. The module's output of standard error is concatenated to the
+logfile that belongs to the input-file. The function has the following arguments:
+
+\begin{enumerate}
+\item Path of the input \NAF{}.
+\item Module script.
+\item Path of the output \NAF{}.
+\end{enumerate}
+
+
+@d functions in the jobfile @{@%
+function runmodule {
+infile=\$1
+modulecommand=\$2
+outfile=\$3
+@% logfile=\$4
+if
+  [ $moduleresult -eq 0 ]
+then
+  cat $infile | $modulecommand > $outfile 2>>$logfile
+  moduleresult=$?
+  if
+    [ $moduleresult -gt 0 ]
+  then
+    failmodule=$modulecommand
+@%     echo Failed: process $procnum";" file $infilefullname";" module $modulecommand";" result $moduleresult >&2
+     echo Failed: module $modulecommand";" result $moduleresult >>$logfile
+     echo Failed: module $modulecommand";" result $moduleresult >&2
+  fi
+fi  
+}
+
+@| @}
+
+
+
+\subsection{Perform the annotation on an input NAF}
+\label{sec:perform}
+
+When a process has obtained the name of a \NAF{} file to be processed
+and has generated filenames for the input-, proc-, log-, fail- and
+output files (section~\ref{sec:generatefilenames}, it can start
+process the file:
+
+@d process infile @{@%
+movetotray $infile $intray $proctray
+mkdir -p $outpath
+mkdir -p $logpath
+TEMPDIR=`mktemp -d -t nlpp.XXXXXX`
+cd $TEMPDIR
+@< retrieve the language of the document @($procfile@) @>
+moduleresult=0
+if
+ [ "$naflang" == "nl" ]
+then
+  timeout m4_timeoutsecs apply_dutch_pipeline
+@%  @< apply the modules for Dutch @>
+else
+  timeout m4_timeoutsecs apply_english_pipeline
+@%  @< apply the modules for English @>
+fi
+timeoutresult=$?
+if
+  [ \$moduleresult -eq 0 ]
+then
+  moduleresult=$timeoutresult
+fi
+@< move the processed naf around @>
+rm -rf $TEMPDIR
+@| @}
+
+@% @d apply the modules for Dutch @{@%
+@d functions in the jobfile @{@%
+function apply_dutch_pipeline
+  runmodule $procfile   $BIND/tok                 tok.naf
+  runmodule tok.naf     $BIND/mor                 mor.naf
+  runmodule mor.naf     $BIND/nerc                nerc.naf
+  runmodule nerc.naf    $BIND/wsd                 wsd.naf
+  runmodule wsd.naf     $BIND/ned                 ned.naf
+  runmodule ned.naf     $BIND/heideltime          times.naf
+  runmodule times.naf   $BIND/onto                onto.naf
+  runmodule onto.naf    $BIND/srl                 srl.naf
+  runmodule srl.naf     $BIND/nomevent            nomev.naf
+  runmodule nomev.naf   $BIND/srl-dutch-nominals  psrl.naf
+  runmodule psrl.naf    $BIND/framesrl            fsrl.naf
+  runmodule fsrl.naf    $BIND/opinimin            opin.naf
+  runmodule opin.naf    $BIND/evcoref             out.naf
+}
+@| @}
+
+
+@% @d apply the modules for English @{@%
+@d functions in the jobfile @{@%
+function apply_english_pipeline
+  runmodule $procfile    $BIND/tok               tok.naf
+  runmodule tok.naf      $BIND/topic             top.naf
+  runmodule top.naf      $BIND/pos               pos.naf
+  runmodule pos.naf      $BIND/constpars         consp.naf
+  runmodule consp.naf    $BIND/nerc              nerc.naf
+  runmodule nerc.naf     $BIND/nedrer            nedr.naf
+  runmodule nedr.naf     $BIND/wikify            wikif.naf
+  runmodule wikif.naf    $BIND/ukb               ukb.naf
+  runmodule ukb.naf      $BIND/ewsd              ewsd.naf
+  runmodule ewsd.naf     $BIND/eSRL              esrl.naf
+  runmodule esrl.naf     $BIND/FBK-time          time.naf
+  runmodule time.naf     $BIND/FBK-temprel       trel.naf
+  runmodule trel.naf     $BIND/FBK-causalrel     crel.naf
+  runmodule crel.naf     $BIND/evcoref           ecrf.naf
+  runmodule ecrf.naf     $BIND/factuality        fact.naf
+  runmodule fact.naf     $BIND/opinimin          out.naf
+}
+@| @}
+
+When processing is ready, the \NAF's involved must be placed in the
+correct location. When processing has been successful, the produced
+\NAF{}, i.e. \verb|out.naf|, must be moved to the outtray and the file
+in the proctray must be removed. Otherwise, the file in the proctray
+must be moved to the failtray. Finally, remove the filename from the
+stopos pool
+
+@d move the processed naf around @{@%
+if
+ [ $moduleresult -eq 0 ]
+then
+  mkdir -p \$outpath
+  mv out.naf \$outfile
+  rm \$procfile
+else
+  movetotray \$procfile \$sourcetray \$failtray
+fi  
+@< remove the infile from the stopos pool @>
+@| @}
+
+
+
+@% The raw \NAF{}'s will be processed with the Newsreader
+@% Pipeline. This has been installed on the account \texttt{phuijgen} on
+@% Lisa. The installation has been performed using the Github repository
+@% \href{https://github.com/PaulHuygen/nlpp}.
+@% 
+@% @d directories of the pipeline @{@%
+@% export piperoot=m4_piperoot
+@% export pipebindir=m4_piperoot/bin
+@% @| @}
+@% 
+@% The following script processes a raw \NAF{} from standard in and
+@% produces the result on standard out.:
+@% 
+@% @o m4_projroot/nlpp @{@%
+@% #!/bin/bash
+@% source m4_aprojroot/parameters
+@% @< directories of the pipeline @>
+@% @< set utf-8 @>
+@% @< check/start the Spotlight server @>
+@% 
+@% OLDD=`pwd`
+@% TEMPDIR=`mktemp -t -d ontemp.XXXXXX`
+@% cd $TEMPDIR
+@% cat            | $pipebindir/tok           > tok.naf
+@% cat tok.naf    | $pipebindir/mor           > mor.naf
+@% cat mor.naf    | $pipebindir/nerc_conll02  > nerc.naf
+@% cat nerc.naf   | $pipebindir/wsd           > wsd.naf
+@% cat wsd.naf    | $pipebindir/ned           > ned.naf
+@% cat ned.naf    | $pipebindir/heideltime    > times.naf
+@% cat times.naf  | $pipebindir/onto          > onto.naf
+@% cat onto.naf   | $pipebindir/srl           > srl.naf
+@% cat srl.naf    | $pipebindir/evcoref       > ecrf.naf
+@% cat ecrf.naf   | $pipebindir/framesrl      > fsrl.naf
+@% cat fsrl.naf   | $pipebindir/dbpner        > dbpner.naf
+@% cat dbpner.naf | $pipebindir/nomevent      > nomev.naf
+@% cat nomev.naf  | $pipebindir/postsrl       > psrl.naf
+@% cat psrl.naf   | $pipebindir/opinimin     
+@% rm -rf $TEMPDIR 
+@% @| @}
+@% 
+@% @d make scripts executable @{@%
+@% chmod 775 m4_aprojroot/pipenl
+@% @| @}
+@% 
+@% Let us start a pipeline with more facilities.
+@% 
+@% \begin{itemize}
+@% \item Create a log file that accepts the log info
+@% \end{itemize}
+@% 
+@% @o m4_projroot/newpipenl @{@%
+@% #!/bin/bash
+@% source m4_aprojroot/parameters
+@% @< directories of the pipeline @>
+@% @< set utf-8 @>
+@% OLDD=`pwd`
+@% TEMPDIR=`mktemp -t -d ontemp.XXXXXX`
+@% cd $TEMPDIR
+@% echo `date +%s`: tok: >&2  
+@% cat | $pipebindir/tok >tok.naf
+@% @< nextmodule @(tok@,mor@,mor@) @>
+@% @< nextmodule @(mor@,nerc_conll02@,nerc@) @>
+@% @< nextmodule @(nerc@,wsd@,wsd@) @>
+@% @< nextmodule @(wsd@,ned@,ned@) @>
+@% @< nextmodule @(ned@,heideltime@,times@) @>
+@% @< nextmodule @(times@,onto@,onto@) @>
+@% @< nextmodule @(onto@,srl@,srl@) @>
+@% @< nextmodule @(srl@,evcoref@,ecrf@) @>
+@% @< nextmodule @(ecrf@,framesrl@,fsrl@) @>
+@% @< nextmodule @(fsrl@,dbpner@,dbpner@) @>
+@% @< nextmodule @(dbpner@,nomevent@,nomev@) @>
+@% @< nextmodule @(nomev@,postsrl@,psrl@) @>
+@% @< nextmodule @(psrl@,opinimin@,opinimin@) @>
+@% cat opinimin.naf
+@% @% echo Tokenizer: >&2
+@% @% cat            | $pipebindir/tok           > tok.naf
+@% @% echo : Morpho-syntactic parser >&2
+@% @% cat tok.naf    | $pipebindir/mor           > mor.naf
+@% @% echo Nerc (conll02): >&2
+@% @% cat mor.naf    | $pipebindir/nerc_conll02  > nerc.naf
+@% @% echo WSD: >&2
+@% @% cat nerc.naf   | $pipebindir/wsd           > wsd.naf
+@% @% echo NED: >&2
+@% @% cat wsd.naf    | $pipebindir/ned           > ned.naf
+@% @% echo Heideltime: >&2
+@% @% cat ned.naf    | $pipebindir/heideltime    > times.naf
+@% @% echo Onot-tagger: >&2
+@% @% cat times.naf  | $pipebindir/onto          > onto.naf
+@% @% echo SRL: >&2
+@% @% cat onto.naf   | $pipebindir/srl           > srl.naf
+@% @% echo Event Coreferencing: >&2
+@% @% cat srl.naf    | $pipebindir/evcoref       > ecrf.naf
+@% @% echo Frame SRL: >&2
+@% @% cat ecrf.naf   | $pipebindir/framesrl      > fsrl.naf
+@% @% echo DBPedia NER: >&2
+@% @% cat fsrl.naf   | $pipebindir/dbpner        > dbpner.naf
+@% @% echo Nominal Event coref.: >&2
+@% @% cat dbpner.naf | $pipebindir/nomevent      > nomev.naf
+@% @% echo Post SRL: >&2
+@% @% cat nomev.naf  | $pipebindir/postsrl       > psrl.naf
+@% @% echo Opinion miner: >&2
+@% @% cat psrl.naf   | $pipebindir/opinimin     
+@% cd $OLDD
+@% rm -rf $TEMPDIR 
+@% exit
+@% @| @}
+@% 
+@% @d make scripts executable @{@%
+@% chmod 775 m4_aprojroot/newpipenl
+@% @| @}
+
+
+@%  1: Name infile
+@%  2: Name module
+@%  3: Name outfile
+
+@% If a module has been passed, proceed with the next module unless
+@% previous module failed. The follosing macro, \verb|nextmodule|, tests
+@% whether the last module has been successfull. If so, it writes a
+@% header to standard error (the logfile) and starts up next
+@% module. Otherwise, it exits the pipeline script with an error code.
+@% 
+@% @d nextmodule @{@%
+@% err=$?
 @% if
-@%   [ $procnum -eq 1 ]
+@%   [ $err -gt 0 ]
 @% then
-@%   @< invoke the runit script @>
+@%   cd $OLDD
+@%   rm -rf $TEMPDIR
+@%   exit $err
 @% fi
+@% echo `date +%s`: @2: >&2  
+@% cat @1.naf | $pipebindir/@2 >@3.naf 
 @% @| @}
 
 
+It is important that the computer uses utf-8 character-encoding.
 
-\subsection{The job}
-\label{sec:thejob}
+@d set utf-8 @{@%
+export LANG=en_US.utf8
+export LANGUAGE=en_US.utf8
+export LC_ALL=en_US.utf8
+@| @}
 
-@% @d  m4_projroot/dutch_pipeline_job.parameters @{@%
-@% export walltime=30:00
+
+@% Actually, we do not yet handle failed files separately. 
+@% And, more actually, we secretly use another script that \verb|m4_pipelinescript| from this document.
+
+
+@% @d process infile @{@%
+@% @% cat $procfile | timeout m4_timeoutsecs m4_aprojroot/newpipenl 2>$logfile  >$outfile
+@% cat $procfile | timeout m4_timeoutsecs m4_pipelinescript 2>$logfile  >$outfile
+@% exitstat=$?
+@% if
+@%   [ $exitstat -gt 0 ]
+@% then
+@%   if
+@%     [ $exitstat == m4_timeouterr ]
+@%   then
+@%     echo `date +%s`: Time-out >>$logfile
+@%   fi
+@%   movetotray $procfile $proctray $failtray
+@%   rm -f $outfile
+@% else
+@% rm $procfile
+@% fi
+@% stopos -p $stopospool remove
 @% @| @}
+@% 
+@% Select a proper spotlighthost:
+@% 
+@% @d parameters @{@%
+@% export spotlighthost=m4_spotlighthost
+@% @| spotlighthost @}
+
+
+\subsection{The jobfile template}
+\label{sec:jobfiletemplate}
+
+Now we know what the job has to do, we can generate the script. It
+executes the functions \verb|passeer| and \verb|veilig| to ensure that
+the management script is not  
 
 @o m4_projroot/m4_jobname.m4 @{@%
 m4_<!!>changecom
@@ -809,15 +1376,177 @@ m4_<!!>changecom
 #PBS -lnodes=1
 <!#!>PBS -lwalltime=m4_<!!>walltime
 source m4_aprojroot/parameters
-@< functions @>
-@< function getfile @>
+export jobname=$PBS_JOBID
+@< log that the job starts @>
+@< set utf-8 @>
+@< initialize sematree @>
+@% passeer
+@% veilig
 @< load stopos module @>
+@< functions @>
+@< functions in the jobfile @>
+check_start_spotlight nl
+check_start_spotlight en
+@% @< function getfile @>
 starttime=`date +%s`
 @< start parallel processes @>
 wait
+@< log that the job finishes @>
 exit
 
 @| @}
+
+
+
+\subsection{Synchronisation mechanism}
+\label{sec:synchronisation}
+
+Make a mechanism that ensures that only a single process can execute
+some functions at a time. Currently we only use this to make sure that
+only one instance of the management script runs. This is necessary
+because loading Stopos with a huge amount of filenames takes a lot of
+time and we don not want that a new instance of the management script
+interferes with this.
+
+The script \verb|sematree|, obtained from
+\url{http://www.pixelbeat.org/scripts/sematree/} allows this kind of
+``mutex'' locking. Inside information learns that sematree is
+available on Lisa (in \verb|m4_sematree_script_location|). To lock
+access Sematree places a file in a \emph{lockdir}. The directory where
+the lockdir resides must be accessable for the management script as
+well as for the jobs. Its name must be present in variable
+\verb|workdir|, that must be exported.
+
+@d initialize sematree @{@%
+export workdir=m4_aworkdir
+mkdir -p $workdir
+@| @}
+
+Now we can implement functions \verb|passeer| (gain exclusive access)
+and \verb|veilig| (give up access).
+
+
+@d functions @{@%
+function passeer () {
+  local lock=$1
+  sematree acquire $lock
+}
+
+function runsingle () {
+  local lock=$1
+  sematree acquire $lock 0 || exit
+}
+
+
+function veilig () {
+  local lock=$1
+  sematree release $lock
+}
+
+@| passeer veilig @}
+
+Occasionally a process applies the \verb|passeer| function, but is
+aborted before it could apply the \verb|veilig| function.  
+
+@d functions @{@%
+
+function remove_obsolete_lock {
+  local lock=$1
+  local max_minutes=$2
+  if
+    [ "$max_minutes" == "" ]
+  then
+   local max_minutes=60
+  fi
+  find $workdir -name $lock -cmin +$max_minutes -print | xargs -iaap rm -rf aap
+}
+@| @}
+
+
+
+
+@% The processes that execute these functions can crash and they are
+@% killed when the time alotted to them has been used up. Thus it
+@% is possible that a process that executed \verb|passeer| is not able to
+@% execute \verb|veilig|. As a result, all other processes would come to a
+@% halt. Therefore, check the age of the lock directory periodically and
+@% remove the directory when it is older than, say, an hour.
+@% 
+@% @d remove old lockdir  @{@%
+@% @%export LOCKDIR=m4_lockdir
+@% find \$workdir/m4_lockfile -amin m4_locktimeout -print 2>/dev/null | xargs rm -rf
+@% @| @}
+@% 
+@% @% The synchronisation mechanism can be used to have parallel processes
+@% @% update the same counter. 
+@% @% 
+@% @% @d increment filecontent @{@%
+@% @% passeer
+@% @% NUM=`cat @1`
+@% @% echo \$((NUM + 1 )) > @1
+@% @% veilig
+@% @% @| @}
+@% @% 
+@% @% @d decrement filecontent @{@%
+@% @% passeer
+@% @% NUM=`cat @1`
+@% @% echo \$((NUM - 1 )) > @1
+@% @% veilig
+@% @% @| @}
+@% 
+@% We use the synchronisation as follows: when a management script
+@% starts, it looks whether jobs are running. If that is not the case it
+@% updates Stopos in a critical section (between commands \verb|passeer|
+@% en \verb|veilig|). If jobs start, they begin to axecute \verb|passeer|
+@% and \verb|veilig|, so they can only go on when not a management
+@% script is updating Stopos. Theoretically, this can go wrong when a job
+@% starts and passes its critical sectiion  between the moment that the
+@% management script counts the jobs and starts the critical
+@% section. However, starting jobs takes a lot of time, so I assume that
+@% this will not happen frequently.
+@% 
+@% 
+@% 
+@% We will need a mechanism to find out whether a certain operation has
+@% taken place within a certain past time period. We use the timestamp of
+@% a file for that. When the operation to be monitored is executed, the
+@% file is touched. The following macro checks such a file. It has the
+@% following three arguments: 1) filename; 2) time-out period; 3)
+@% result. The result parameter will become true when the file didn't
+@% exist or when it had not been touched during the time-out period. In
+@% those cases the macro touches the file.
+@% 
+@% @d check whether update is necessary  @{@%
+@% @< write log @(now: `date +%s`@) @>
+@% arg=@1
+@% stamp=`date -r @1 +%s`
+@% @< write log @($arg: $stamp@) @>
+@% passeer
+@% if [ ! -e @1 ]
+@% then
+@%   @3=true
+@% elif [ \$((`date +%s` - `date -r @1 +%s`)) -gt @2 ]
+@% then
+@%   @3=true
+@% else
+@%   @3=false
+@% fi
+@% if \$@3
+@% then
+@%   echo `date` > @1
+@% fi
+@% veilig
+@% if \$@3
+@% then
+@%   @< write log @(yes, update@) @>
+@% else
+@%   @< write log @(no, no update@) @>
+@% fi
+@% @| @}
+@% 
+
+
+
 
 
 @% #
@@ -860,8 +1589,7 @@ exit
 @%     FILTRUNK=${INFILE##$INTRAY/}
 @%     OUTFILE=$OUTTRAY/${FILTRUNK}
 @%     LOGFILE=$LOGTRAY/${FILTRUNK}
-@%     FAILFILE=$FAILTRAY/${FILTRUNK}
-@%     OUTPATH=${OUTFILE%/*}
+@%     FAILFILE=$FAILTRAY/${FILTRUNK}@%     OUTPATH=${OUTFILE%/*}
 @%     FAILPATH=${FAILFILE%/*}
 @%     LOGPATH=${LOGFILE%/*}
 @%     echo To process $INFILE
@@ -1013,332 +1741,269 @@ exit
 @% wait
 
 
-\subsection{Manage the jobs}
+\subsection{The job management script}
 \label{sec:jobtrack}
 
-Find out how many submitted jobs there are and how many are
-running. 
 
-@d count jobs @{@%
-joblist=`mktemp -t jobrep.XXXXXX`
-rm -rf $joblist
-showq -u $USER | tail -n 1 > $joblist
-running_jobs=`cat $joblist | gawk '
-    { match($0, /Active Jobs:[[:blank:]]*([[:digit:]]+)[[:blank:]]*Idle/, arr)
-      print arr[1]
-    }'`
-total_jobs=`cat $joblist | gawk '
-    { match($0, /Total Jobs:[[:blank:]]*([[:digit:]]+)[[:blank:]]*Active/, arr)
-      print arr[1]
-    }'`
-rm $joblist
-@| running_jobs total_jobs @}
-
-Make sure that enough jobs are submitted. Currently we aim at one job per
-m4_filesperjob waiting files.
-@d parameters @{@%
-filesperjob=m4_filesperjob
-@| @}
-
-The follwing code-piece submits jobs when necessary. Note that this
-piece will be used when it is already known that there are files
-waiting to be processed. So, there must be at least one job.
-
-@d submit jobs @{@%
-jobs_needed=$((unreadycount / $filesperjob))
-if
-  [ $jobs_needed -lt 1 ]
-then
-  jobs_needed=1
-fi
-jobs_to_be_submitted=$((jobs_needed - $total_jobs))
-if
-  [ $jobs_to_be_submitted -gt 0 ]
-then
-   @< generate jobscript @>
-   qsub -t 1-$jobs_to_be_submitted m4_aprojroot/m4_jobname
-fi 
-total_jobs=$jobs_needed
-@| jobs_needed jobs_to_be_submitted@}
-
-Update \verb|total_jobs|, in order to print a correct summary.
-
-@d submit jobs @{@%
-total_jobs=$jobs_needed
-@| @}
-
-
-@d generate jobscript @{@%
-echo "m4_<!!>define(m4_<!!>walltime, $walltime)m4_<!!>dnl" >job.m4
-m4_changequote(<![!>,<!]!>)m4_dnl
-echo 'm4_[]changequote(`<!'"'"',`!>'"'"')m4_[]dnl' >>job.m4
-m4_changequote([<!],[!>])m4_dnl
-cat m4_jobname<!!>.m4 >>job.m4
-cat job.m4 | m4 -P >m4_jobname
-# rm job.m4
-@| @}
-
-
-
-\subsubsection{Keep it going}
-\label{sec:koopgoing}
-
-The script \verb|runit| performs job management. Therefore, this
-script must be started at regular intervals. We cannot install
-cron-jobs on Lisa to do this. Therefore, it would be a good idea to to
-have jobs starting runit now and
-then. I tried to do that over ssh, but it did not succeed (timed out). 
-
-@% @d parameters @{@%
-@% export runit_deadtime=m4_runit_deadtime
-@% @| runit_deadtime @}
+@% \subsubsection{Keep it going}
+@% \label{sec:koopgoing}
 @% 
-@% @d set runit timestamp @{@%
-@% echo `date +%s` >m4_runittimefile
-@% @| @}
+@% The script \verb|runit| performs job management. Therefore, this
+@% script must be started at regular intervals. We cannot install
+@% cron-jobs on Lisa to do this. Therefore, it would be a good idea to to
+@% have jobs starting runit now and
+@% then. I tried to do that over ssh, but it did not succeed (timed out). 
 @% 
-@% @d invoke the runit script @{@%
-@% startrunit=0
-@% if
-@%   [ -e "m4_runittimefile" ] 
-@% then
-@%   lasttime=`cat m4_runittimefile`
-@%   now=`date +%s`
-@%   elapsed_seconds=$((now - $lasttime))
-@%   min_seconds=$((runit_deadtime * 60))
-@%   if
-@%     [ $elapsed_seconds -le $min_seconds ]
-@%   then
-@%     startrunit=1
-@%   fi
-@% fi
-@% if
-@%   [ $startrunit -eq 0 ]
-@% then
-@%   @< set runit timestamp @>
-@%   ssh -o PubkeyAuthentication=yes $USER@@m4_lisahost "nohup m4_aprojroot/runit &"
-@% fi
-@% @| @}
-
-
-
-@% When we have received files to be parsed we have to submit the proper
-@% amount of jobs. To determine whether new jobs have to be
-@% submitted we have to know the number of waiting and running
-@% jobs. Unfortunately it is too costly to often request a list of
-@% running jobs. Therefore we will make a bookkeeping. File
-@% \verb|m4_jobcountfile| contains a list of the running and waiting
-@% jobs.
-@% 
-@% @d parameters @{@%
-@% JOBCOUNTFILE=m4_jobcountfile
-@% @| JOBCOUNTFILE @}
+@% @% @d parameters @{@%
+@% @% export runit_deadtime=m4_runit_deadtime
+@% @% @| runit_deadtime @}
+@% @% 
+@% @% @d set runit timestamp @{@%
+@% @% echo `date +%s` >m4_runittimefile
+@% @% @| @}
+@% @% 
+@% @% @d invoke the runit script @{@%
+@% @% startrunit=0
+@% @% if
+@% @%   [ -e "m4_runittimefile" ] 
+@% @% then
+@% @%   lasttime=`cat m4_runittimefile`
+@% @%   now=`date +%s`
+@% @%   elapsed_seconds=$((now - $lasttime))
+@% @%   min_seconds=$((runit_deadtime * 60))
+@% @%   if
+@% @%     [ $elapsed_seconds -le $min_seconds ]
+@% @%   then
+@% @%     startrunit=1
+@% @%   fi
+@% @% fi
+@% @% if
+@% @%   [ $startrunit -eq 0 ]
+@% @% then
+@% @%   @< set runit timestamp @>
+@% @%   ssh -o PubkeyAuthentication=yes $USER@@m4_lisahost "nohup m4_aprojroot/runit &"
+@% @% fi
+@% @% @| @}
 @% 
 @% 
-@% It is updated as follows:
 @% 
-@% \begin{itemize}
-@% \item When a job is submitted, a line containing the job-id, the word
-@%   ``wait'' and a timestamp is added to the file.
-@% \item A job that starts, replaces in the line with its job-id the word
-@%   ``waiting'' by running and replaces the timestamp.
-@% \item A job that ends regularly, removes the line with its job-id.
-@% \item A job that ends leaves a log message. The filename consists of a 
-@%   concatenation of the jobname, a dot, the character ``o'' and the
-@%   job-id. At a regular basis the existence of such files is checked
-@%   and \verb|\$JOBCOUNTFILE| updated. 
-@% \end{itemize}
-@% 
-@% 
-@% Submit a job and write a line in the jobcountfile. The line consists
-@% of the jobnumber, the word ``wait'' and the timestamp in universal seconds.
-@% 
-@% @d submit a job @{@%
+@% @% When we have received files to be parsed we have to submit the proper
+@% @% amount of jobs. To determine whether new jobs have to be
+@% @% submitted we have to know the number of waiting and running
+@% @% jobs. Unfortunately it is too costly to often request a list of
+@% @% running jobs. Therefore we will make a bookkeeping. File
+@% @% \verb|m4_jobcountfile| contains a list of the running and waiting
+@% @% jobs.
+@% @% 
+@% @% @d parameters @{@%
+@% @% JOBCOUNTFILE=m4_jobcountfile
+@% @% @| JOBCOUNTFILE @}
+@% @% 
+@% @% 
+@% @% It is updated as follows:
+@% @% 
+@% @% \begin{itemize}
+@% @% \item When a job is submitted, a line containing the job-id, the word
+@% @%   ``wait'' and a timestamp is added to the file.
+@% @% \item A job that starts, replaces in the line with its job-id the word
+@% @%   ``waiting'' by running and replaces the timestamp.
+@% @% \item A job that ends regularly, removes the line with its job-id.
+@% @% \item A job that ends leaves a log message. The filename consists of a 
+@% @%   concatenation of the jobname, a dot, the character ``o'' and the
+@% @%   job-id. At a regular basis the existence of such files is checked
+@% @%   and \verb|\$JOBCOUNTFILE| updated. 
+@% @% \end{itemize}
+@% @% 
+@% @% 
+@% @% Submit a job and write a line in the jobcountfile. The line consists
+@% @% of the jobnumber, the word ``wait'' and the timestamp in universal seconds.
+@% @% 
+@% @% @d submit a job @{@%
+@% @% @% passeer
+@% @% qsub m4_aprojroot/m4_jobname | \
+@% @%  gawk -F"." -v tst=`date +%s`  '{print $1 " wait " tst}' \
+@% @%  >> \$JOBCOUNTFILE
+@% @% @< write log @(Updated jobcountfile@) @>
+@% @% @% veilig
+@% @% @| @}
+@% @% 
+@% @% When a job starts, it performs some bookkeeping. It finds out its own job number and changes \verb|wait| into \verb|run|  in the bookeepfile.
+@% @% 
+@% @% @d perform jobfile-bookkeeping @{@%
+@% @% @< find out the job number @>
+@% @% prognam=m4_jobname$JOBNUM
+@% @% @< write log @(start@) @>
+@% @% @< change ``wait'' to ``run'' in jobcountfile @>
+@% @% @| @}
+@% @% 
+@% @% The job \textsc{id} begins with the number,
+@% @% e.g. \verb|6670732.batch1.irc.sara.nl|. 
+@% @% 
+@% @% @d find out the job number @{@%
+@% @% JOBNUM=\${PBS_JOBID%%.*}
+@% @% @| @}
+@% @% 
+@% @% @d change ``wait'' to ``run'' in jobcountfile @{@%
+@% @% @%stmp=`date +%s`
+@% @% if [ -e \$JOBCOUNTFILE ]
+@% @% then
+@% @%   passeer
+@% @%   mv \$JOBCOUNTFILE \$tmpfil
+@% @%   gawk -v jid=\$JOBNUM -v stmp=`date +%s` \
+@% @%     '@< awk script to change status of job in joblist @>' \
+@% @%     \$tmpfil >\$JOBCOUNTFILE
+@% @%   veilig
+@% @%   rm -rf \$tmpfil
+@% @% fi
+@% @% @| @}
+@% @% 
+@% @% @d awk script to change status of job in joblist @{@%
+@% @% BEGIN {WRIT="N"};
+@% @% { if(match(\$0,"^"jid)>0) {
+@% @%      print jid " run  " stmp;
+@% @%      WRIT="Y";
+@% @%   } else {print}
+@% @% };
+@% @% END {
+@% @%   if(WRIT=="N") print jid " run  " stmp;
+@% @% }@%
+@% @% @| @}
+@% @% 
+@% @% 
+@% @% 
+@% @% When a job ends, it removes the line:
+@% @% 
+@% @% @d remove the job from the counter @{@%
 @% @% passeer
-@% qsub m4_aprojroot/m4_jobname | \
-@%  gawk -F"." -v tst=`date +%s`  '{print $1 " wait " tst}' \
-@%  >> \$JOBCOUNTFILE
-@% @< write log @(Updated jobcountfile@) @>
+@% @% mv \$JOBCOUNTFILE \$tmpfil
+@% @% gawk -v jid=\$JOBNUM  '\$1 !~ "^"jid {print}' \$tmpfil >\$JOBCOUNTFILE
 @% @% veilig
-@% @| @}
-@% 
-@% When a job starts, it performs some bookkeeping. It finds out its own job number and changes \verb|wait| into \verb|run|  in the bookeepfile.
-@% 
-@% @d perform jobfile-bookkeeping @{@%
-@% @< find out the job number @>
-@% prognam=m4_jobname$JOBNUM
-@% @< write log @(start@) @>
-@% @< change ``wait'' to ``run'' in jobcountfile @>
-@% @| @}
-@% 
-@% The job \textsc{id} begins with the number,
-@% e.g. \verb|6670732.batch1.irc.sara.nl|. 
-@% 
-@% @d find out the job number @{@%
-@% JOBNUM=\${PBS_JOBID%%.*}
-@% @| @}
-@% 
-@% @d change ``wait'' to ``run'' in jobcountfile @{@%
-@% @%stmp=`date +%s`
-@% if [ -e \$JOBCOUNTFILE ]
-@% then
-@%   passeer
-@%   mv \$JOBCOUNTFILE \$tmpfil
-@%   gawk -v jid=\$JOBNUM -v stmp=`date +%s` \
-@%     '@< awk script to change status of job in joblist @>' \
-@%     \$tmpfil >\$JOBCOUNTFILE
-@%   veilig
-@%   rm -rf \$tmpfil
-@% fi
-@% @| @}
-@% 
-@% @d awk script to change status of job in joblist @{@%
-@% BEGIN {WRIT="N"};
-@% { if(match(\$0,"^"jid)>0) {
-@%      print jid " run  " stmp;
-@%      WRIT="Y";
-@%   } else {print}
-@% };
-@% END {
-@%   if(WRIT=="N") print jid " run  " stmp;
-@% }@%
-@% @| @}
+@% @% rm -rf \$tmpfil
+@% @% @| @}
+@% @% 
+@% @% Periodically check whether jobs have been killed before completion and
+@% @% have thus not been able to remove their line in the jobcountfile. To
+@% @% do this, write the jobnumbers in a temporary file and then check the
+@% @% jobcounter file in one blow, to prevent frequent locks.
+@% @% 
+@% @% 
+@% @% @d do brief check of expired jobs @{@%
+@% @% obsfil=`mktemp --tmpdir obs.XXXXXXX`
+@% @% rm -rf \$obsfil
+@% @% @< make a list of jobs that produced logfiles @(\$obsfil@) @>
+@% @% @< compare the logfile list with the jobcounter list @(\$obsfil@) @>
+@% @% rm -rf \$obsfil
+@% @% @| @}
+@% @% 
+@% @% @d do the frequent tasks @{@%
+@% @% @< do brief check of expired jobs @>
+@% @% @| @}
+@% @% 
+@% @% @%@d do thorough check of expired jobs @{@%
+@% @% @%@< check whether update is necessary @(\$thoroughjobcheckfil@,180@,thoroughjobcheck@) @>
+@% @% @%if \$thoroughjobcheck
+@% @% @%then
+@% @% @%@% @< skip brief jobcheck @>
+@% @% @% @< verify jobs-bookkeeping @>
+@% @% @%fi
+@% @% @%@| @}
 @% 
 @% 
 @% 
-@% When a job ends, it removes the line:
 @% 
-@% @d remove the job from the counter @{@%
-@% passeer
-@% mv \$JOBCOUNTFILE \$tmpfil
-@% gawk -v jid=\$JOBNUM  '\$1 !~ "^"jid {print}' \$tmpfil >\$JOBCOUNTFILE
-@% veilig
+@% When a job has ended, a logfile, and sometimes an error-file, is
+@% produced. The name of the logfile is a concatenation of the jobname, a
+@% dot, the character \verb|o| and the jobnumber. The error-file has a
+@% similar name, but the character \verb|o| is replaced by
+@% \verb|e|. Generate a sorted list of the jobnumbers and
+@% remove the logfiles and error-files:
+@% 
+@% @d make a list of jobs that produced logfiles @{@%
+@% for file in m4_jobname.o*
+@% do
+@%   JOBNUM=\${file<!##!>m4_jobname.o}
+@%   echo \${file<!##!>m4_jobname.o} >>\$tmpfil
+@%   rm -rf m4_jobname.[eo]\$JOBNUM
+@% done
+@% sort < \$tmpfil >@1
 @% rm -rf \$tmpfil
 @% @| @}
 @% 
-@% Periodically check whether jobs have been killed before completion and
-@% have thus not been able to remove their line in the jobcountfile. To
-@% do this, write the jobnumbers in a temporary file and then check the
-@% jobcounter file in one blow, to prevent frequent locks.
+@% Remove the jobs in the list from the counter file if they occur there.
 @% 
-@% 
-@% @d do brief check of expired jobs @{@%
-@% obsfil=`mktemp --tmpdir obs.XXXXXXX`
-@% rm -rf \$obsfil
-@% @< make a list of jobs that produced logfiles @(\$obsfil@) @>
-@% @< compare the logfile list with the jobcounter list @(\$obsfil@) @>
-@% rm -rf \$obsfil
+@% @d compare the logfile list with the jobcounter list @{@%
+@% if [ -e \$JOBCOUNTFILE ]
+@% then
+@%   passeer
+@%   sort < \$JOBCOUNTFILE >\$tmpfil
+@%   gawk -v obsfil=@1 ' 
+@%     BEGIN {getline obs < obsfil}
+@%     { while((obs<\$1) && ((getline obs < obsfil) >0)){}
+@%       if(obs==\$1) next;
+@%       print
+@%     }
+@%   ' \$tmpfil >\$JOBCOUNTFILE
+@%   veilig
+@% fi
+@% rm -rf \$tmpfil
 @% @| @}
 @% 
-@% @d do the frequent tasks @{@%
-@% @< do brief check of expired jobs @>
+@% From time to time, check whether the jobs-bookkeeping is still
+@% correct.
+@% To this end, request a list of jobs from the operating
+@% system. 
+@% 
+@% @d verify jobs-bookkeeping @{@%
+@% actjobs=`mktemp --tmpdir act.XXXXXX`
+@% rm -rf \$actjobs
+@% qstat -u  phuijgen | grep m4_jobname | gawk -F"." '{print \$1}' \
+@%  | sort  >\$actjobs
+@% @< compare the active-jobs list with the jobcounter list @(\$actjobs@) @>
+@% rm -rf \$actjobs
 @% @| @}
 @% 
-@% @%@d do thorough check of expired jobs @{@%
-@% @%@< check whether update is necessary @(\$thoroughjobcheckfil@,180@,thoroughjobcheck@) @>
-@% @%if \$thoroughjobcheck
-@% @%then
-@% @%@% @< skip brief jobcheck @>
-@% @% @< verify jobs-bookkeeping @>
-@% @%fi
-@% @%@| @}
-
-
-
-
-When a job has ended, a logfile, and sometimes an error-file, is
-produced. The name of the logfile is a concatenation of the jobname, a
-dot, the character \verb|o| and the jobnumber. The error-file has a
-similar name, but the character \verb|o| is replaced by
-\verb|e|. Generate a sorted list of the jobnumbers and
-remove the logfiles and error-files:
-
-@d make a list of jobs that produced logfiles @{@%
-for file in m4_jobname.o*
-do
-  JOBNUM=\${file<!##!>m4_jobname.o}
-  echo \${file<!##!>m4_jobname.o} >>\$tmpfil
-  rm -rf m4_jobname.[eo]\$JOBNUM
-done
-sort < \$tmpfil >@1
-rm -rf \$tmpfil
-@| @}
-
-Remove the jobs in the list from the counter file if they occur there.
-
-@d compare the logfile list with the jobcounter list @{@%
-if [ -e \$JOBCOUNTFILE ]
-then
-  passeer
-  sort < \$JOBCOUNTFILE >\$tmpfil
-  gawk -v obsfil=@1 ' 
-    BEGIN {getline obs < obsfil}
-    { while((obs<\$1) && ((getline obs < obsfil) >0)){}
-      if(obs==\$1) next;
-      print
-    }
-  ' \$tmpfil >\$JOBCOUNTFILE
-  veilig
-fi
-rm -rf \$tmpfil
-@| @}
-
-From time to time, check whether the jobs-bookkeeping is still
-correct.
-To this end, request a list of jobs from the operating
-system. 
-
-@d verify jobs-bookkeeping @{@%
-actjobs=`mktemp --tmpdir act.XXXXXX`
-rm -rf \$actjobs
-qstat -u  phuijgen | grep m4_jobname | gawk -F"." '{print \$1}' \
- | sort  >\$actjobs
-@< compare the active-jobs list with the jobcounter list @(\$actjobs@) @>
-rm -rf \$actjobs
-@| @}
-
-@d do the now-and-then tasks @{@%
-@< verify jobs-bookkeeping @>
-@| @}
-
-
-@d compare the active-jobs list with the jobcounter list @{@%
-if [ -e \$JOBCOUNTFILE ]
-then
-  passeer
-  sort < \$JOBCOUNTFILE >\$tmpfil
-  gawk -v actfil=@1 -v stmp=`date +%s` ' 
-    @< awk script to compare the active-jobs list with the jobcounter list @>
-  ' \$tmpfil >\$JOBCOUNTFILE
-  veilig
-  rm -rf \$tmpfil
-else
-  cp @1 \$JOBCOUNTFILE
-fi
-@| @}
-
-Copy lines from the logcount file if the jobnumber matches a line in
-the list actual jobs. Write entries for jobnumbers that occur only in
-the actual job list.
-
-@d awk script to compare the active-jobs list with the jobcounter list @{@%
-BEGIN {actlin=(getline act < actfil)}
-{ while(actlin>0 && (act<\$1)){ 
-     print act " wait " stmp;
-     actlin=(getline act < actfil);
-  };
-  if((actlin>0) && act==\$1 ){
-     print
-     actlin=(getline act < actfil);
-  }
-}
-END {
-    while((actlin>0) && (act ~ /^[[:digit:]]+/)){
-      print act " wait " stmp;
-    actlin=(getline act < actfil);
- };
-}
-@| @}
+@% @d do the now-and-then tasks @{@%
+@% @< verify jobs-bookkeeping @>
+@% @| @}
+@% 
+@% 
+@% @d compare the active-jobs list with the jobcounter list @{@%
+@% if [ -e \$JOBCOUNTFILE ]
+@% then
+@%   passeer
+@%   sort < \$JOBCOUNTFILE >\$tmpfil
+@%   gawk -v actfil=@1 -v stmp=`date +%s` ' 
+@%     @< awk script to compare the active-jobs list with the jobcounter list @>
+@%   ' \$tmpfil >\$JOBCOUNTFILE
+@%   veilig
+@%   rm -rf \$tmpfil
+@% else
+@%   cp @1 \$JOBCOUNTFILE
+@% fi
+@% @| @}
+@% 
+@% Copy lines from the logcount file if the jobnumber matches a line in
+@% the list actual jobs. Write entries for jobnumbers that occur only in
+@% the actual job list.
+@% 
+@% @d awk script to compare the active-jobs list with the jobcounter list @{@%
+@% BEGIN {actlin=(getline act < actfil)}
+@% { while(actlin>0 && (act<\$1)){ 
+@%      print act " wait " stmp;
+@%      actlin=(getline act < actfil);
+@%   };
+@%   if((actlin>0) && act==\$1 ){
+@%      print
+@%      actlin=(getline act < actfil);
+@%   }
+@% }
+@% END {
+@%     while((actlin>0) && (act ~ /^[[:digit:]]+/)){
+@%       print act " wait " stmp;
+@%     actlin=(getline act < actfil);
+@%  };
+@% }
+@% @| @}
 
 
 @% \subsubsection{Submit extra jobs}
@@ -1378,166 +2043,22 @@ END {
 
 
 
-@d derive number of jobs to be submitted  @{@%
-REQJOBS=\$(( \$(( \$NRFILES / m4_filesperjob )) ))
-if [ \$REQJOBS -gt m4_maxjobs ]
-then
-  REQJOBS=m4_maxjobs
-fi
-if [ \$NRFILES -gt 0 ]
-then
-  if [ \$REQJOBS -eq 0 ]
-  then
-    REQJOBS=1
-  fi
-fi
-@1=\$(( \$REQJOBS - \$NRJOBS ))
-
-@| @}
-
-\subsection{Synchronisation mechanism}
-\label{sec:synchronisation}
-
-Make a mechanism that ensures that only a single process can execute
-some functions at a time. For instance, if a process selects a file to
-be processed next, it selects a file name from a directory-listing and
-then removes the selected file from the directory. The two steps form
-a ``critical code section'' and only a single process at a time should
-be allowed to execute this section. Therefore, generate the functions
-\verb|passeer| and \verb|veilig| (cf. E.W.~Dijkstra). When a process
-completes \verb|passeer|, no other processes can complete
-\verb|passeer| until the first process executes \verb|veilig|.
-
-Function \verb|passeer| tries repeatedly to create a \emph{lock
-  directory}, until it succeeds and function \verb|veilig| removes the
-lock directory.
-
-
-Sometimes de-synchonisation is good, to prevent that all processes are
-waiting at the same time for the same event. Therefore, now and then a
-process should wait a random amount of time. We don't need to use
-sleep, because the cores have no other work to do.
-
-@d functions @{@%
-waitabit()
-{ ( RR=\$RANDOM
-    while
-      [ \$RR -gt 0 ]
-    do
-    RR=\$((RR - 1))
-    done
-  )
-  
-}
-
-@| waitabit @}
-
-
-@d parameters @{@%
-export LOCKDIR=m4_lockdir
-
-@| LOCKDIR @}
-
-@d functions @{@%
-function passeer () {
- while ! (mkdir \$LOCKDIR 2> /dev/null)
- do
-@%  sleep 1
-   waitabit
- done
-}
-
-function veilig () {
-  rmdir "\$LOCKDIR"
-}
-
-@| passeer veilig @}
-
-Function \verb|runsingle| is similar to \verb|passeer|, but it exits
-when the lock is set.
-
-@d functions @{@%
-function runsingle () {
- if ! (mkdir \$LOCKDIR 2> /dev/null)
- then
-    exit
- fi
-}
-
-function veilig () {
-  rmdir "\$LOCKDIR"
-}
-
-@| passeer veilig @}
-
-
-The processes that execute these functions can crash and they are
-killed when the time alotted to them has been used up. Thus it
-is possible that a process that executed \verb|passeer| is not able to
-execute \verb|veilig|. As a result, all other processes would come to a
-halt. Therefore, check the age of the lock directory periodically and
-remove the directory when it is older than, say, two minutes (executing critical code
-sections ought to take only a very short amount of time).
-
-@d remove old lockdir  @{@%
-@%export LOCKDIR=m4_lockdir
-find \$LOCKDIR -amin m4_locktimeout -print 2>/dev/null | xargs rm -rf
-@| @}
-
-The synchronisation mechanism can be used to have parallel processes
-update the same counter. 
-
-@d increment filecontent @{@%
-passeer
-NUM=`cat @1`
-echo \$((NUM + 1 )) > @1
-veilig
-@| @}
-
-@d decrement filecontent @{@%
-passeer
-NUM=`cat @1`
-echo \$((NUM - 1 )) > @1
-veilig
-@| @}
-
-We will need a mechanism to find out whether a certain operation has
-taken place within a certain past time period. We use the timestamp of
-a file for that. When the operation to be monitored is executed, the
-file is touched. The following macro checks such a file. It has the
-following three arguments: 1) filename; 2) time-out period; 3)
-result. The result parameter will become true when the file didn't
-exist or when it had not been touched during the time-out period. In
-those cases the macro touches the file.
-
-@d check whether update is necessary  @{@%
-@< write log @(now: `date +%s`@) @>
-arg=@1
-stamp=`date -r @1 +%s`
-@< write log @($arg: $stamp@) @>
-passeer
-if [ ! -e @1 ]
-then
-  @3=true
-elif [ \$((`date +%s` - `date -r @1 +%s`)) -gt @2 ]
-then
-  @3=true
-else
-  @3=false
-fi
-if \$@3
-then
-  echo `date` > @1
-fi
-veilig
-if \$@3
-then
-  @< write log @(yes, update@) @>
-else
-  @< write log @(no, no update@) @>
-fi
-@| @}
-
+@% @d derive number of jobs to be submitted  @{@%
+@% REQJOBS=\$(( \$(( \$NRFILES / m4_filesperjob )) ))
+@% if [ \$REQJOBS -gt m4_maxjobs ]
+@% then
+@%   REQJOBS=m4_maxjobs
+@% fi
+@% if [ \$NRFILES -gt 0 ]
+@% then
+@%   if [ \$REQJOBS -eq 0 ]
+@%   then
+@%     REQJOBS=1
+@%   fi
+@% fi
+@% @1=\$(( \$REQJOBS - \$NRJOBS ))
+@% 
+@% @| @}
 
 
 
@@ -1547,33 +2068,36 @@ fi
 
 @o m4_projroot/runit @{@%
 #!/bin/bash
+source /etc/profile
 source m4_aprojroot/parameters
 cd $root
+@< initialize sematree @>
 @< get runit options @>
 @< functions @>
-@< remove old lockdir @>
-runsingle
-@< init logfile @>
+remove_obsolete_lock runit_runs
+@% @< remove old lockdir @(runit_runs@) @>
+runsingle runit_runs
+@% runsingle
+@% @< init logfile @>
 @< load stopos module @>
 @< check/create directories @>
 @< remove old joblogs @>
-@< get stopos status @>
+@% @< get stopos status @>
 @% @< do brief check of expired jobs @>
 @< count jobs @>
-if
-  [ $total_jobs -eq 0 ]
-then
-   @< set up new stopos pool @>
-else
-   @< restore old procfiles @>
+@% if
+@%   [ $running_jobs -eq 0 ]
+@% then
+@< update the stopos pool @>
 fi
-@< submit jobs @>
-veilig
+@< submit jobs when necessary @>
+@% veilig
 if
   [ $loud ]
 then
   @< print summary @>
 fi
+veilig runit_runs
 @| @}
 
 @d make scripts executable @{@%
@@ -2552,4 +3076,4 @@ source : m4_progname.w \$(DIRS) \$(NUWEB)
 
 % Local IspellDict: british 
 
-% LocalWords:  Webcom
+% LocalWords:  Webcom stopos filenames proctray intray
