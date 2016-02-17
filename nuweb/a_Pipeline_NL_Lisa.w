@@ -1,4 +1,4 @@
-m4_include(inst.m4)m4_dnl
+4_include(inst.m4)m4_dnl
 m4_sinclude(local.m4)m4_dnl
 \documentclass[twoside,oldtoc]{artikel3}
 @% \documentclass[twoside]{article}
@@ -150,7 +150,7 @@ of the files in \verb|\data\in| and passes it to a ``stopos
 pool'' where the work processes can find them.
 
 Periodically the management script moves unprocessed documents from
-\verb|data/proc| to \verb|data/in| and regenerate the filelist in the
+\verb|data/proc| to \verb|data/in| and regenerate the infilelist in the
 Stopos pool.
 
 A list of files to be processed is called a ``Stopos pool''. 
@@ -332,13 +332,13 @@ files in the proctray, the outtray or the failtray and the logtray:
 
 @d generate filenames @{@%
 filtrunk=${infile##$intray/}
-outfile=$outtray/${filtrunk}
-failfile=$failtray/${filtrunk}
-logfile=$logtray/${filtrunk}
-procfile=$proctray/${filtrunk}
-outpath=${outfile%/*}
-procpath=${procfile%/*}
-logpath=${logfile%/*}
+export outfile=$outtray/${filtrunk}
+export failfile=$failtray/${filtrunk}
+export logfile=$logtray/${filtrunk}
+export procfile=$proctray/${filtrunk}
+export outpath=${outfile%/*}
+export procpath=${procfile%/*}
+export logpath=${logfile%/*}
 @| filtrunk outfile logfile procfile outpath procpath logpath @}
 
 \subsection{Manage list of files in Stopos}
@@ -381,7 +381,7 @@ else
   @< move old procfiles to intray @>
 fi
 find $intray -type f -print | sort >infilelist
-nr_of_infiles=`wc -l infilelist`
+nr_of_infiles=`cat infilelist | wc -l`
 if
   [ $nr_of_infiles -gt 0 ]
 then
@@ -391,11 +391,11 @@ then
     @< (re)generate stopos pool @>
     cp infilelist new.infilelist
   else
-    @< update old.filelist @>
+    @< update old.infilelist @>
     @< generate new.infilelist @>
   fi
-  stopos -p $stopospool add new.filelist
-  @< add contents of new.filelist to old.filelist @>
+  stopos -p $stopospool add new.infilelist
+  @< add contents of new.infilelist to old.infilelist @>
 fi
 @|nr_of_infiles @}
 
@@ -417,13 +417,13 @@ fi
 
 When there are no jobs, we can re-generate the Stopos pool without
 risk to confuse running processes. So, in this case, remove the
-stopos pool if it exists, remove \verb|old.filelist| if it exists and
+stopos pool if it exists, remove \verb|old.infilelist| if it exists and
 generate a new pool.
 
 @d (re)generate stopos pool @{@%
 stopos -p $stopospool purge
 stopos -p $stopospool create
-rm -f old.filelist
+rm -f old.infilelist
 @| @}
 
 
@@ -432,22 +432,22 @@ still in the intray. Pre-requisite: \verb|filenames| and
 \verb|old.filenames| are both sorted. Replace \verb|old.filenames|
 with this list.
 
-@d update old.filelist @{@%
-comm -12 old.filelist filelist >old_current.filelist
-cp old_current.filelist old.filelist
+@d update old.infilelist @{@%
+comm -12 old.infilelist infilelist >old_current.infilelist
+cp old_current.infilelist old.infilelist
 @| @}
 
 Find the names or the files that are in the intray but not yet in the
 pool. Replace \verb|new.filenames| with this list.
 
 @d generate new.infilelist @{@%
-comm -13 old.filelist filelist >new.filelist
+comm -13 old.infilelist infilelist >new.infilelist
 @| @}
 
-@d add contents of new.filelist to old.filelist @{@%
-cat new.filelist >>old.filelist
-sort old.filelist >old.filelist.sorted
-mv old.filelist.sorted old.filelist
+@d add contents of new.infilelist to old.infilelist @{@%
+cat new.infilelist >>old.infilelist
+sort old.infilelist >old.infilelist.sorted
+mv old.infilelist.sorted old.infilelist
 @| @}
 
 
@@ -463,10 +463,10 @@ mv old.filelist.sorted old.filelist
 @% then
 @%   passeer
 @%   
-@%   find $intray -type f -print >filelist
+@%   find $intray -type f -print >infilelist
 @%   stopos -p $stopospool purge
 @%   stopos -p $stopospool create
-@%   stopos -p $stopospool add filelist
+@%   stopos -p $stopospool add infilelist
 @%   stopos -p $stopospool status
 @%   veilig
 @% @| @}
@@ -491,15 +491,15 @@ maxproctime=m4_maxprocminutes
 @|maxproctime @}
 
 @% @d add new infiles to stopos @{@%
-@% find $intray -type f -print | sort >filelist
+@% find $intray -type f -print | sort >infilelist
 @% if
-@%   [ -e old.filelist ]
+@%   [ -e old.infilelist ]
 @% then
-@%   diff old.filelist filelist | \
+@%   diff old.infilelist infilelist | \
 @%      gawk '/^> / {gsub(/^> /, ""); print}' \
-@%      >new.filelist  
+@%      >new.infilelist  
 @% else
-@%   cp filelist newfilelist
+@%   cp infilelist newfilelist
 @% fi
 @% 
 @% @| @}
@@ -559,6 +559,14 @@ function getfile() {
 
 @| getfile @}
 
+\subsubsection{Remove a filename from Stopos}
+\label{sec:removefilenamefromstopos}
+
+@d remove the infile from the stopos pool @{@%
+stopos -p $stopospool remove
+@| @}
+
+
 @%    \subsubsection{Get Stopos status}
 @% \la@% bel{sec:stopos-state}
 @% 
@@ -580,9 +588,6 @@ function getfile() {
 @% busy_files=$STOPOS_PRESENT
 @% @| @}
 @% 
-@% @d remove the infile from the stopos pool @{@%
-@% stopos -p $stopospool remove
-@% @| @}
 @% 
 
 @% To enable this moving-around of \NAF{}
@@ -672,7 +677,7 @@ if
 then
    @< submit jobs @(\$jobs_to_be_submitted@) @>
 fi 
-total_jobs=$total_jobs + $jobs_to_be_submitted
+total_jobs=$((total_jobs + $jobs_to_be_submitted))
 @| jobs_needed jobs_to_be_submitted@}
 
 \subsection{Generate and submit jobs}
@@ -817,7 +822,7 @@ echo `date +%s`: @1 >> $timelogfile
 @% @d functions @{@%
 @% function restoreprocfile {
 @%   procf=$1
-@%   filelist=$2
+@%   infilelist=$2
 @%   inf=$intray/${procfile##$proctray}
 @%   echo $inf >>$filelist
 @%   movetotray $procf $proctray $intray
@@ -966,15 +971,17 @@ function check_start_spotlight {
   else
     spotport=m4_spotlight_en_port
   fi
-  spothost = m4_spotlighthost
-  @< check spotlight on@($spothost@,$spotport@) @>
+  spotlighthost=m4_spotlighthost
+  @< check spotlight on@($spotlighthost@,$spotport@) @>
   if
     [ $spotlightrunning -ne 0 ]
   then
     start_spotlight_on_localhost $language $spotport
-    spothost="localhost"
+    spotlighthost="localhost"
+    spotlightrunning=0
   fi
-  return $spothost
+  export spotlighthost
+  export spotlightrunning
 }
 @| @}
 
@@ -997,6 +1004,7 @@ function start_spotlight_on_localhost {
         $spotresource \ 
         http://localhost:$port/rest \
    &
+}
 @| @}
 
 @d check spotlight on @{@%
@@ -1021,6 +1029,10 @@ Select the model that the Nerc module has to use, dependent of the language.
 naflang=`cat @1 | m4_pipelineroot/bin/langdetect`
 export naflang
 #
+@< set nercmodel @>
+@| naflang @}
+
+@d set nercmodel @{@%
 if
   [ "$naflang" == "nl" ]
 then
@@ -1028,8 +1040,7 @@ then
 else
   export nercmodel=en/en-newsreader-clusters-3-class-muc7-conll03-ontonotes-4.0.bin
 fi
-@| naflang @}
-
+@| nercmodel @}
 
 
 
@@ -1062,7 +1073,7 @@ logfile that belongs to the input-file. The function has the following arguments
 \end{enumerate}
 
 
-@d functions in the jobfile @{@%
+@d functions in the pipeline-file @{@%
 function runmodule {
 infile=\$1
 modulecommand=\$2
@@ -1080,11 +1091,21 @@ then
 @%     echo Failed: process $procnum";" file $infilefullname";" module $modulecommand";" result $moduleresult >&2
      echo Failed: module $modulecommand";" result $moduleresult >>$logfile
      echo Failed: module $modulecommand";" result $moduleresult >&2
+     cp $outfile out.naf
+     exit $moduleresult
   fi
 fi  
 }
 
+export runmodule
 @| @}
+
+Initialise \verb|moduleresult| with value 0:
+
+@d functions in the pipeline-file @{@%
+export moduleresult=0
+@|moduleresult @}
+
 
 
 
@@ -1100,32 +1121,46 @@ process the file:
 movetotray $infile $intray $proctray
 mkdir -p $outpath
 mkdir -p $logpath
-TEMPDIR=`mktemp -d -t nlpp.XXXXXX`
+export TEMPDIR=`mktemp -d -t nlpp.XXXXXX`
 cd $TEMPDIR
 @< retrieve the language of the document @($procfile@) @>
 moduleresult=0
-if
- [ "$naflang" == "nl" ]
-then
-  timeout m4_timeoutsecs apply_dutch_pipeline
-@%  @< apply the modules for Dutch @>
-else
-  timeout m4_timeoutsecs apply_english_pipeline
-@%  @< apply the modules for English @>
-fi
-timeoutresult=$?
-if
-  [ \$moduleresult -eq 0 ]
-then
-  moduleresult=$timeoutresult
-fi
+timeout m4_timeoutsecs $root/apply_pipeline
+pipelineresult=$?
 @< move the processed naf around @>
+cd $root
 rm -rf $TEMPDIR
+@| pipelineresult timeout @}
+
+We need to set a time-out on processing, otherwise documents that take
+too much time keep being recycled between the intray and the
+proctray. The bash timeout function executes the instruction that is
+given as argument in a subshell. Therefore, execute processing in a
+separate script. The subshell knows the exported parameters in the
+environment from which the timeout instruction has been executed.
+
+@o m4_projroot/apply_pipeline @{@%
+#!/bin/bash
+@< functions in the pipeline-file @>
+
+cd $TEMPDIR
+if
+  [ "$naflang" == "nl" ]
+then
+   apply_dutch_pipeline
+else
+   apply_english_pipeline
+fi
 @| @}
 
+@d make scripts executable @{@%
+chmod 775 m4_aprojroot/apply_pipeline
+@| @}
+
+
 @% @d apply the modules for Dutch @{@%
-@d functions in the jobfile @{@%
-function apply_dutch_pipeline
+@d functions in the pipeline-file @{@%
+function apply_dutch_pipeline {
   runmodule $procfile   $BIND/tok                 tok.naf
   runmodule tok.naf     $BIND/mor                 mor.naf
   runmodule mor.naf     $BIND/nerc                nerc.naf
@@ -1140,12 +1175,15 @@ function apply_dutch_pipeline
   runmodule fsrl.naf    $BIND/opinimin            opin.naf
   runmodule opin.naf    $BIND/evcoref             out.naf
 }
+
+export apply_dutch_pipeline
+
 @| @}
 
 
 @% @d apply the modules for English @{@%
-@d functions in the jobfile @{@%
-function apply_english_pipeline
+@d functions in the pipeline-file @{@%
+function apply_english_pipeline {
   runmodule $procfile    $BIND/tok               tok.naf
   runmodule tok.naf      $BIND/topic             top.naf
   runmodule top.naf      $BIND/pos               pos.naf
@@ -1163,6 +1201,9 @@ function apply_english_pipeline
   runmodule ecrf.naf     $BIND/factuality        fact.naf
   runmodule fact.naf     $BIND/opinimin          out.naf
 }
+
+export apply_english_pipeline
+
 @| @}
 
 When processing is ready, the \NAF's involved must be placed in the
@@ -1174,13 +1215,13 @@ stopos pool
 
 @d move the processed naf around @{@%
 if
- [ $moduleresult -eq 0 ]
+ [ $pipelineresult -eq 0 ]
 then
   mkdir -p \$outpath
   mv out.naf \$outfile
   rm \$procfile
 else
-  movetotray \$procfile \$sourcetray \$failtray
+  movetotray \$procfile \$proctray \$failtray
 fi  
 @< remove the infile from the stopos pool @>
 @| @}
@@ -1371,10 +1412,11 @@ executes the functions \verb|passeer| and \verb|veilig| to ensure that
 the management script is not  
 
 @o m4_projroot/m4_jobname.m4 @{@%
-m4_<!!>changecom
+m4_<!!>changecom()m4_dnl
 #!/bin/bash
 #PBS -lnodes=1
 <!#!>PBS -lwalltime=m4_<!!>walltime
+( $BIND/start_eSRL )&
 source m4_aprojroot/parameters
 export jobname=$PBS_JOBID
 @< log that the job starts @>
@@ -2069,6 +2111,7 @@ function remove_obsolete_lock {
 @o m4_projroot/runit @{@%
 #!/bin/bash
 source /etc/profile
+export PATH=/home/phuijgen/usrlocal/bin/:$PATH
 source m4_aprojroot/parameters
 cd $root
 @< initialize sematree @>
@@ -2089,7 +2132,7 @@ runsingle runit_runs
 @%   [ $running_jobs -eq 0 ]
 @% then
 @< update the stopos pool @>
-fi
+@% fi
 @< submit jobs when necessary @>
 @% veilig
 if

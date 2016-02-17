@@ -7,7 +7,7 @@ m4_define(m4_filesperjob, `30')m4_dnl
 m4_define(m4_timeoutsecs, 1500)m4_dnl
 m4_define(m4_maxprocminutes, `30')m4_dnl
 m4_define(m4_logging, true)m4_dnl
-m4_define(m4_maxjoblogminutes, `144000')m4_dnl
+m4_define(m4_maxjoblogminutes, `1440')m4_dnl
 m4_define(m4_pipelineroot, /home/phuijgen/nlp/nlpp)m4_dnl
 m4_define(m4_pipelinescript, /home/phuijgen/usrlocal/bin/nlpp)m4_dnl
 m4_dnl
