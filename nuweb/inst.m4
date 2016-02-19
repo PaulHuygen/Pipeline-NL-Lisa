@@ -2,14 +2,15 @@ m4_define(m4_repoversion, `0.0.00')m4_dnl
 m4_dnl
 m4_dnl Settings that are likely to vary
 m4_dnl
-m4_define(m4_walltime, 30:00)m4_dnl   Max duration of a job
+m4_define(m4_walltime, 10:00)m4_dnl   Max duration of a job
 m4_define(m4_filesperjob, `30')m4_dnl
+m4_define(m4_maxjobs, `500')m4_dnl
 m4_define(m4_timeoutsecs, 1500)m4_dnl
 m4_define(m4_maxprocminutes, `30')m4_dnl
 m4_define(m4_logging, true)m4_dnl
 m4_define(m4_maxjoblogminutes, `1440')m4_dnl
-m4_define(m4_pipelineroot, /home/phuijgen/nlp/nlpp)m4_dnl
-m4_define(m4_pipelinescript, /home/phuijgen/usrlocal/bin/nlpp)m4_dnl
+m4_define(m4_pipelineroot, /home/phuijgen/nlp/test/nlpp)m4_dnl
+m4_dnl m4_define(m4_pipelinescript, /home/phuijgen/usrlocal/bin/nlpp)m4_dnl
 m4_dnl
 m4_dnl Titles
 m4_dnl

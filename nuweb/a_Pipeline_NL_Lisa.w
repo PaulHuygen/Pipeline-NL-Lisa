@@ -1,4 +1,4 @@
-4_include(inst.m4)m4_dnl
+m4_include(inst.m4)m4_dnl
 m4_sinclude(local.m4)m4_dnl
 \documentclass[twoside,oldtoc]{artikel3}
 @% \documentclass[twoside]{article}
@@ -386,7 +386,7 @@ if
   [ $nr_of_infiles -gt 0 ]
 then
   if
-    [ $total_jobs -eq 0 ]
+    [ $jobcount -eq 0 ]
   then
     @< (re)generate stopos pool @>
     cp infilelist new.infilelist
@@ -631,8 +631,50 @@ following:
 
 Find out how many submitted jobs there are and how many of them are
 actually running. Lisa supplies an instruction \verb|showq| that
-produces a list of running and waiting jobs. Extract the summaries of
-the numbers of running jobs and the total number of jobs.
+produces a list of running and waiting jobs. Unfortunately, it seems
+that this instruction shows only the running jobs in job
+arrays. Therefore we need to make job bookkeeping.
+
+File \verb|jobcounter| lists the number of jobs. When extra jobs are
+submitted, the number is increased. When logfiles are found that job
+produce when they end, the number is decreased. 
+
+@d count jobs @{@%
+if
+  [ -e jobcounter ]
+then
+  export jobcount=`cat jobcounter`
+else
+  jobcount=0
+fi
+@| @}
+
+Count the logfiles that finished jobs produce. Derive the number of
+jobs that have been finished since last time. Move the logfiles to
+directory \verb|joblogs|. It is possible that jobs finish and produce
+logfiles while we are doing all this. Therefore we start to make a
+list of the logfiles that we will process.
+
+@d count jobs @{@%
+cd $root
+ls -1 m4_jobname<!!>.[eo]* >jobloglist
+finished_jobs=`cat jobloglist | grep "\.e" | wc -l`
+@% finished_jobs=`ls -1 $root/m4_jobname<!!>.e* | wc -l`
+mkdir -p joblogs
+cat jobloglist | xargs -iaap mv aap joblogs/
+mv m4_jobname.[eo]* joblogs
+if
+  [ $finished_jobs -gt $jobcount ]
+then
+  jobcount=0
+else
+  jobcount=$((jobcount - $finished_jobs))
+fi
+@| @}
+
+Extract the summaries of
+the numbers of running jobs and the total number of jobs from the job
+management system of Lisa.
 
 @d count jobs @{@%
 joblist=`mktemp -t jobrep.XXXXXX`
@@ -642,12 +684,26 @@ running_jobs=`cat $joblist | gawk '
     { match($0, /Active Jobs:[[:blank:]]*([[:digit:]]+)[[:blank:]]*Idle/, arr)
       print arr[1]
     }'`
-total_jobs=`cat $joblist | gawk '
+total_jobs_qn=`cat $joblist | gawk '
     { match($0, /Total Jobs:[[:blank:]]*([[:digit:]]+)[[:blank:]]*Active/, arr)
       print arr[1]
     }'`
 rm $joblist
-@| running_jobs total_jobs @}
+@| running_jobs total_jobs_qn @}
+
+
+If there are more running than \verb|jobcount| lists, something is
+wrong. The best we can do in that case is to make \verb|jobcount|
+equal to \verb|running_jobs|.
+
+@d count jobs @{@%
+if
+  [ $running_jobs -gt $jobcount ]
+then
+  jobcount=$running_jobs
+fi
+@| @}
+
 
 Currently we aim at one job per m4_filesperjob waiting files.
 @d parameters @{@%
@@ -656,7 +712,8 @@ filesperjob=m4_filesperjob
 
 Calculate the number of jobs that have to be submitted. Note that this
 code-piece will be used when it is already known that there are files
-waiting to be processed. So, there must be at least one job.
+waiting to be processed. So, there must be at least one
+job. Furthermore, let us not flood the place with millions of jobs. 
 
 @d determine how many jobs have to be submitted @{@%
 jobs_needed=$((unreadycount / $filesperjob))
@@ -665,7 +722,12 @@ if
 then
   jobs_needed=1
 fi
-jobs_to_be_submitted=$((jobs_needed - $total_jobs))
+if
+  [ $jobs_needed -gt m4_maxjobs ]
+then
+  jobs_needed=m4_maxjobs
+fi
+jobs_to_be_submitted=$((jobs_needed - $jobcount))
 @| @}
 
 Submits jobs when necessary:
@@ -677,8 +739,12 @@ if
 then
    @< submit jobs @(\$jobs_to_be_submitted@) @>
 fi 
-total_jobs=$((total_jobs + $jobs_to_be_submitted))
+jobcount=$((jobcount + $jobs_to_be_submitted))
+echo $jobcount > jobcounter
 @| jobs_needed jobs_to_be_submitted@}
+
+
+
 
 \subsection{Generate and submit jobs}
 \label{sec:generate-jobs}
@@ -717,7 +783,7 @@ jobscript has to be submitted.
 
 @d submit jobs @{@%
  @< generate jobscript @>
- qsub -t 1-@1 m4_aprojroot/m4_jobname
+ jobid=`qsub -t 1-@1 m4_aprojroot/m4_jobname`
 @| @}
 
 \section{Logging}
@@ -894,18 +960,28 @@ fi
 \subsection{Start parallel processes}
 \label{sec:start_processes}
 
-@d start parallel processes @{@%
+@d run parallel processes @{@%
 @< determine amount of memory and nodes @>
 @< determine number of parallel processes @>
 procnum=0
+@< init processescounter @>
 for ((i=1 ; i<=$maxprocs ; i++))
 do
   ( procnum=$i
+    @< increment the processes-counter @>
     @< perform the processing loop @>
+    @< decrement the processes-counter, kill if this was the only process @>
   )&
 done
-
+@< wait for working-processes @>
 @| procnum @}
+
+
+
+
+\subsection{Perform the processing loop}
+\label{sec:procloop}
+
 
 In a loop, the process obtains the path to  an input \NAF{} and
 processes it.  
@@ -918,7 +994,7 @@ do
 @%        @< process 1 invokes runit @>
    @< add timelog entry @(Start $infile@) @>
    @< process infile @>
-   @< add timelog entry @(Finished $infile@) @>
+   @< add timelog entry @(Finished $infile with result: $pipelineresult@) @>
 
 done
 @| @}
@@ -1091,8 +1167,13 @@ then
 @%     echo Failed: process $procnum";" file $infilefullname";" module $modulecommand";" result $moduleresult >&2
      echo Failed: module $modulecommand";" result $moduleresult >>$logfile
      echo Failed: module $modulecommand";" result $moduleresult >&2
+     echo Failed: module $modulecommand";" result $moduleresult
      cp $outfile out.naf
      exit $moduleresult
+  else
+     echo Completed: module $modulecommand";" result $moduleresult >>$logfile
+     echo Completed: module $modulecommand";" result $moduleresult >&2
+     echo Completed: module $modulecommand";" result $moduleresult
   fi
 fi  
 }
@@ -1416,12 +1497,13 @@ m4_<!!>changecom()m4_dnl
 #!/bin/bash
 #PBS -lnodes=1
 <!#!>PBS -lwalltime=m4_<!!>walltime
-( $BIND/start_eSRL )&
 source m4_aprojroot/parameters
+piddir=`mktemp -d -t piddir.XXXXXXX`
+( $BIND/start_eSRL $piddir )&
 export jobname=$PBS_JOBID
 @< log that the job starts @>
 @< set utf-8 @>
-@< initialize sematree @>
+@% @< initialize sematree @>
 @% passeer
 @% veilig
 @< load stopos module @>
@@ -1429,10 +1511,11 @@ export jobname=$PBS_JOBID
 @< functions in the jobfile @>
 check_start_spotlight nl
 check_start_spotlight en
+echo spotlighthost: $spotlighthost >&2
+echo spotlighthost: $spotlighthost
 @% @< function getfile @>
 starttime=`date +%s`
-@< start parallel processes @>
-wait
+@< run parallel processes @>
 @< log that the job finishes @>
 exit
 
@@ -1503,6 +1586,53 @@ function remove_obsolete_lock {
   find $workdir -name $lock -cmin +$max_minutes -print | xargs -iaap rm -rf aap
 }
 @| @}
+
+
+\subsubsection{Count processes in jobs}
+\label{sec:processescounter}
+
+When a job runs, it start up independent sub-processes that do the
+work and it may start up servers that perform specific tasks (e.g. a
+Spotlight server). We want the job to shut down when there is nothing
+to be done. The ``wait'' instruction of Bash does not help us, because
+that instruction waits for the servers that will not stop. Instead we
+make a construction that counts the number of processes that do the
+work and activates the exit instruction when there are no more
+left. We use the capacity of sematree to increment and decrement
+counters. The process that decrements the counter to zero releases a
+lock that frees the main process. The working directory of sematree
+must be local on the node that hosts the job.
+
+@d init processescounter @{@%
+export workdir=`mktemp -d -t workdir.XXXXXX`
+sematree acquire finishlock
+@| workdir finishlock @}
+
+
+@d increment the processes-counter @{@%
+sematree acquire countlock
+proccount=`sematree inc countlock`
+sematree release countlock
+@| countlock @}
+
+@d decrement the processes-counter, kill if this was the only process @{@%
+sematree acquire countlock
+proccount=`sematree dec countlock`
+sematree release countlock
+echo "Process $proccunt stops." >&2
+if
+  [ $proccount -eq 0 ]
+then
+  sematree release finishlock
+fi
+@| @}
+
+@d wait for working-processes @{@%
+sematree acquire finishlock
+sematree release finishlock
+echo "No working processes left. Exiting." >&2
+@| @}
+ 
 
 
 
@@ -2141,6 +2271,7 @@ then
   @< print summary @>
 fi
 veilig runit_runs
+exit
 @| @}
 
 @d make scripts executable @{@%
@@ -2176,8 +2307,14 @@ echo in         : $incount
 echo proc       : $proccount
 echo failed     : $failcount
 echo processed  : $((logcount - $failcount))
-echo jobs       : $total_jobs
+echo jobs       : $jobcount
 echo running    : $running_jobs
+echo submitted  : $jobs_to_be_submitted
+if
+  [ ! "$jobid" == "" ]
+then
+  echo "job-id     : $jobid"
+fi
 @| @}
 
 
