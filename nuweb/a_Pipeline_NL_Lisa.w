@@ -302,14 +302,31 @@ mkdir -p $proctray
 @< count files in tray @(logtray@,logcount@) @>
 unreadycount=$((incount + $proccount))
 @< remove empty directories @>
-if
-  [ ! "$(ls -A $intray)" ] &&  [ ! "$(ls -A $proctray)" ]
-then
-  echo "Finished processing"
-@%   veilig
-  exit
-fi
 @| infilesexist incount proccount failcount logcount @}
+
+@% \subsection{Reset if there are no files to be processed}
+@% \label{sec:reset}
+@% 
+@% If it turns out that there are no files to be processed, reset the system:
+@% \begin{itemize}
+@% \item Delete outstanding jobs.
+@% \item Purge the stopos pool.
+@% \item Set jobcounter to zero.
+@% \item move remaining joblogfiles.
+@% \end{itemize}
+@% 
+@% 
+@% @d check/create directories @{@%
+@% if
+@%   [ ! "$(ls -A $intray)" ] &&  [ ! "$(ls -A $proctray)" ]
+@% then
+@%   echo "Finished processing"
+@%   veilig
+@%   exit
+@% fi
+@% @| @}
+
+
 
 @d count files in tray @{@%
 @2=`find $@1 -type f -print | wc -l`
@@ -359,8 +376,9 @@ in the Stopos pool.
 processed back the intray. We know that these files are not being
 processed because either there are no running jobs or the files reside
 in the proctray for a longer time than jobs are allowed to run.
-\item Make file \verb|filenames| that lists all the files that are
-  currently in the intray.
+\item Make file \verb|infilelist| that lists files that are
+  currently in the intray. It seems better to not overload stopos,
+  therefore we list at most m4_max_infile_number filenames.
 \item Remove from \verb|old.filenames| the names of the files that are
   no longer in the intray. Hopefully they heve been processed or are
   being processed.
@@ -371,6 +389,14 @@ in the proctray for a longer time than jobs are allowed to run.
 \item Add the content of \verb|new.filenames| to \verb|old.filenames|.
 \end{enumerate}
 
+When we run the job -manager twice per hour, Stopos needs to contain enough filenames to keep Lisa working for the
+next half hour. Probably Lisa's job-control system does not allow us
+to run more than 100 jobs at the same time. Typically a job runs seven
+parallel processes. Each process will probably handle at most one
+\NAF{} file per minute. That means, that if stopos contains $100
+\times 7 \times 30 = 21 10^{3}$ filenames, Lisa can be kept working
+for half an hour. 
+
 @d update the stopos pool @{@%
 cd $root
 if
@@ -380,7 +406,7 @@ then
 else
   @< move old procfiles to intray @>
 fi
-find $intray -type f -print | sort >infilelist
+find $intray -type f -print | head -n m4_maxinfile_number | sort >infilelist
 nr_of_infiles=`cat infilelist | wc -l`
 if
   [ $nr_of_infiles -gt 0 ]
@@ -662,7 +688,6 @@ finished_jobs=`cat jobloglist | grep "\.e" | wc -l`
 @% finished_jobs=`ls -1 $root/m4_jobname<!!>.e* | wc -l`
 mkdir -p joblogs
 cat jobloglist | xargs -iaap mv aap joblogs/
-mv m4_jobname.[eo]* joblogs
 if
   [ $finished_jobs -gt $jobcount ]
 then
@@ -710,27 +735,36 @@ Currently we aim at one job per m4_filesperjob waiting files.
 filesperjob=m4_filesperjob
 @| @}
 
-Calculate the number of jobs that have to be submitted. Note that this
-code-piece will be used when it is already known that there are files
-waiting to be processed. So, there must be at least one
-job. Furthermore, let us not flood the place with millions of jobs. 
+Calculate the number of jobs that have to be submitted.
 
 @d determine how many jobs have to be submitted @{@%
+@< determine number of jobs that we want to have @>
+jobs_to_be_submitted=$((jobs_needed - $jobcount))
+@| @}
+
+Variable \verb|jobs_needed| will contain the number of jobs that we
+want to have submitted, given the number of unready NAF files.
+
+@d determine number of jobs that we want to have @{@%
 jobs_needed=$((unreadycount / $filesperjob))
 if
-  [ $jobs_needed -lt 1 ]
+  [ $unreadycount -gt 0 ] && [ $jobs_needed -eq 0 ]
 then
   jobs_needed=1
 fi
+@| @}
+
+Let us not flood the place with millions of jobs. Set a max of
+m4_maxjobs submitted jobs.
+
+@d determine number of jobs that we want to have @{@%
 if
   [ $jobs_needed -gt m4_maxjobs ]
 then
   jobs_needed=m4_maxjobs
 fi
-jobs_to_be_submitted=$((jobs_needed - $jobcount))
 @| @}
 
-Submits jobs when necessary:
 
 @d submit jobs when necessary @{@%
 @< determine how many jobs have to be submitted @>
@@ -738,8 +772,8 @@ if
   [ \$jobs_to_be_submitted -gt 0 ]
 then
    @< submit jobs @(\$jobs_to_be_submitted@) @>
+   jobcount=$((jobcount + $jobs_to_be_submitted))
 fi 
-jobcount=$((jobcount + $jobs_to_be_submitted))
 echo $jobcount > jobcounter
 @| jobs_needed jobs_to_be_submitted@}
 
@@ -802,19 +836,18 @@ There are three kinds of log-files:
 \end{enumerate}
 
 
-\subsection{Job logs}
-\label{sec:joblogs}
-
-
-While we are busy with file-bookkeeping, let us handle the job-logs
-too. When a job finishes it produces two files that contain standard
-output and standard error of the log. We remove logfiles that are more
-than a day old. Job-logs have the same name as the job. The extension
-begins with character \verb|o| (output) or  \verb|e|, followed by a number.
-
-@d remove old joblogs @{@%
-find $root -name "m4_jobname.[eo]*" -cmin +<!!>m4_maxjoblogminutes -delete
-@| @}
+@% \subsection{Job logs}
+@% \label{sec:joblogs}
+@% 
+@% While we are busy with file-bookkeeping, let us handle the job-logs
+@% too. When a job finishes it produces two files that contain standard
+@% output and standard error of the log. We remove logfiles that are more
+@% than a day old. Job-logs have the same name as the job. The extension
+@% begins with character \verb|o| (output) or  \verb|e|, followed by a number.
+@% 
+@% @d remove old joblogs @{@%
+@% find $root -name "m4_jobname.[eo]*" -cmin +<!!>m4_maxjoblogminutes -delete
+@% @| @}
 
 
 \subsection{Time log}
@@ -1270,11 +1303,13 @@ function apply_english_pipeline {
   runmodule top.naf      $BIND/pos               pos.naf
   runmodule pos.naf      $BIND/constpars         consp.naf
   runmodule consp.naf    $BIND/nerc              nerc.naf
-  runmodule nerc.naf     $BIND/nedrer            nedr.naf
+  runmodule nerc.naf     $BIND/ned               ned.naf
+  runmodule ned.naf      $BIND/nedrer            nedr.naf
   runmodule nedr.naf     $BIND/wikify            wikif.naf
   runmodule wikif.naf    $BIND/ukb               ukb.naf
   runmodule ukb.naf      $BIND/ewsd              ewsd.naf
-  runmodule ewsd.naf     $BIND/eSRL              esrl.naf
+  runmodule ewsd.naf     $BIND/coreference-base  coref.naf
+  runmodule coref.naf    $BIND/eSRL              esrl.naf
   runmodule esrl.naf     $BIND/FBK-time          time.naf
   runmodule time.naf     $BIND/FBK-temprel       trel.naf
   runmodule trel.naf     $BIND/FBK-causalrel     crel.naf
@@ -2254,7 +2289,8 @@ runsingle runit_runs
 @% @< init logfile @>
 @< load stopos module @>
 @< check/create directories @>
-@< remove old joblogs @>
+@% @< reset if nothing is to be done @>
+@% @< remove old joblogs @>
 @% @< get stopos status @>
 @% @< do brief check of expired jobs @>
 @< count jobs @>
