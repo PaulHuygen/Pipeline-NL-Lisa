@@ -368,113 +368,197 @@ The processes obtain the names of the files to be processed from
 Stopos. Adding large amount of filenames to the stopos pool take much
 time, so this must be done sparingly. We do it as follows:
 \begin{enumerate}
-\item File \verb|old.filenames| contains the filenames that have been inserted
-in the Stopos pool.
-\item When there is no pool or the pool is empty, generate a new pool
-  and remove \verb|old.filenames|.
+\item First look how many filenames are still available in the
+  pool. If the pool is empty, or there are no files in the intray, or
+  there are no jobs, the pool must be renewed. On the other hand,
+  if there are still lots of filenames in it, we can leave the pool alone.
+\item If the pool is running out, something has to be done:
+\item Generate a file \verb|infilelist| that contains the paths to the files in
+  the intray.
+\item Assume file \verb|old.filenames|, if it exists, contains the
+  filenames that have been inserted in the Stopos pool.
+\item Delete from \verb|old.filenames| the names of the
+  files that are no longer in the intray. They have probably been
+  processed or are being processed.
 \item  Move the files in the proctray that are not actually being
-processed back the intray. We know that these files are not being
-processed because either there are no running jobs or the files reside
-in the proctray for a longer time than jobs are allowed to run.
+  processed back the intray. We know that these files are not being
+  processed because either there are no running jobs or the files reside
+  in the proctray for a longer time than jobs are allowed to run.
 \item Make file \verb|infilelist| that lists files that are
-  currently in the intray. It seems better to not overload stopos,
-  therefore we list at most m4_max_infile_number filenames.
-\item Remove from \verb|old.filenames| the names of the files that are
-  no longer in the intray. Hopefully they heve been processed or are
-  being processed.
-\item Make file \verb|new.filenames| that contains the names of the
-  files in the intray that are not present in
-  \verb|old.filenames|. These filenames have to be added to the pool.
+  currently in the intray.
+\item Check whether the listed filenames are present in
+  \verb|old.filenames| and remove them from  \verb|infilelist| when
+  that is the case. Put the result in  \verb|new.filenames|.
 \item Add the files in \verb|new.filenames| to the pool.
 \item Add the content of \verb|new.filenames| to \verb|old.filenames|.
 \end{enumerate}
 
-When we run the job -manager twice per hour, Stopos needs to contain enough filenames to keep Lisa working for the
-next half hour. Probably Lisa's job-control system does not allow us
-to run more than 100 jobs at the same time. Typically a job runs seven
-parallel processes. Each process will probably handle at most one
-\NAF{} file per minute. That means, that if stopos contains $100
-\times 7 \times 30 = 21 10^{3}$ filenames, Lisa can be kept working
-for half an hour. 
+It seems that the file-bookkeeping that is external is sometimes
+flawed and therefore we renew the pool as often as we can.
+
+
+When we run the job -manager twice per hour, Stopos needs to contain
+enough filenames to keep Lisa working for the next half hour. Probably
+Lisa's job-control system does not allow us to run more than 100 jobs
+at the same time. Typically a job runs seven parallel processes. Each
+process will probably handle at most one \NAF{} file per minute. That
+means, that if stopos contains $100 \times 7 \times 30 = 21 10^{3}$
+filenames, Lisa can be kept working for half an hour.
+
+First let us see whether we will update the existing pool or purge and
+renew it. We renew it:
+\begin{enumerate}
+\item When there are no files in the intray, so the pool ought to be empty;
+\item When there are no jobs around, so renewing the pool does not
+  interfere with jobs running.
+\item When the pool status tells us that the pool is empty.
+\end{enumerate}
+
+
+
 
 @d update the stopos pool @{@%
 cd $root
+@< is the pool full or empty? @(pool_full@,pool_empty@) @>
+if
+  [ \$pool_full -ne 0 ]
+then
+  @< make a list of filenames in the intray @>
+  @< decide whether to renew the stopos-pool @>
+  @< clean up pool and old.filenames @>
+  @< clean up proctray @>
+  @< add new filenames to the pool @>
+fi
+@|pool_full pool_empty @}
+
+
+The following macro sets the first argument variable to ``1'' if the pool
+does not exist or if it contains less then
+m4_sufficient_stopos_entries filenames. Otherwise, it sets the
+variable to ``0'' (true). It sets the second argument variable similar
+when there no filenames left in the pool.
+
+@d is the pool full or empty? @{@%
+@1=1
+@2=0
+stopos -p \$stopospool status >/dev/null
+result=\$?
+if
+  [ \$result -eq 0 ]
+then
+  if
+    [ $STOPOS_PRESENT0 -gt m4_sufficient_stopos_entries ]
+  then
+    @1=0
+  fi
+  if
+    [ $STOPOS_PRESENT0 -gt 0 ]
+  then
+    @2=1
+  fi
+fi
+@| @}
+
+@d  make a list of filenames in the intray @{@%
+find \$intray -type f -print | sort >infilelist
+intraysize=`cat infilelist | wc -l`
+@| infilelist intraysize @}
+
+
+
+Note that variable \verb|jobcount| needs to be known before running
+the following macro. When variable \verb|regen_pool_condtion| is equal
+to zero, the pool has to be renewed.
+
+@d decide whether to renew the stopos-pool @{@%
+cd $root
+regen_pool_condition=1
+if
+  [ \$intraysize -eq 0 ] || [ \$jobcount -eq 0 ] || [ \$pool_empty -eq 0 ]
+then
+  regen_pool_condition=0
+fi
+@| regen_pool_condition @}
+
+@d clean up pool and old.filenames @{@%
+if
+  [ \$regen_pool_condition -eq 0 ]
+then
+  stopos -p $stopospool purge
+  stopos -p $stopospool create
+  rm -f old.infilelist
+  touch old.infilelist
+else
+    @< clean up old.infilelist @>
+fi
+
+@| @}
+
+Remove from \verb|old.filelist| the names of files that are no longer
+in the intray.
+
+@d clean up old.infilelist @{@%
+comm -12 old.infilelist infilelist >temp.infilelist
+cp temp.infilelist old.infilelist
+comm -13 old.infilelist infilelist >temp.infilelist
+cp temp.infilelist infilelist
+@| @}
+
+Make a list of names of files in the proctray that should be moved to
+the intray, either because they reside longer in the proctray than the
+lifetime of jobs or because there are no running jobs.  Move the files
+in the list back to the intray and add the list to \verb|infilelist|. \textbf{Note:} that after this \verb|infilelist| is no longer sorted.
+
+@d clean up proctray @{@%
 if
   [ $running_jobs -eq 0 ]
 then
-  @< move all procfiles to intray @>
+  find $proctray -type f -print | sort >oldprocfilelist
 else
-  @< move old procfiles to intray @>
+  find $proctray -type f -cmin +$maxproctime -print | sort  >oldprocfilelist
 fi
-find $intray -type f -print | head -n m4_maxinfile_number | sort >infilelist
-nr_of_infiles=`cat infilelist | wc -l`
-if
-  [ $nr_of_infiles -gt 0 ]
-then
-  if
-    [ $jobcount -eq 0 ]
-  then
-    @< (re)generate stopos pool @>
-    cp infilelist new.infilelist
-  else
-    @< update old.infilelist @>
-    @< generate new.infilelist @>
-  fi
-  stopos -p $stopospool add new.infilelist
-  @< add contents of new.infilelist to old.infilelist @>
-fi
-@|nr_of_infiles @}
+cat oldprocfilelist | xargs -iaap  bash -c 'movetotray aap $proctray $intray'
+cat infilelist oldprocfilelist >temp.infilelist
+mv temp.infilelist infilelist
+@| @}
 
-@% Find out how many filenames are still in the Stopos pool. 
-@% If the Stopos pool does not exist, assign 0 files.
+Add the names of the files in the intray that are not yet in the pool
+to the pool. Then update \verb|old.infilelist|.
+
+@d add new filenames to the pool @{@%
+stopos -p $stopospool add infilelist
+cat infilelist old.infilelist | sort >temp.infilelist
+mv temp.infilelist old.infilelist
+rm infilelist
+@| @}
+
+
+@% Find the names of files that have been inserted in the pool and are
+@% still in the intray. Pre-requisite: \verb|filenames| and
+@% \verb|old.filenames| are both sorted. Replace \verb|old.filenames|
+@% with this list. See \verb|man comm| to learn how \verb|comm| works.
 @% 
-@% @d find out the number of files in the Stopos pool @{@%
-@% stopos -p $stopospool status
-@% result=$?
-@% if
-@%   [ $result -gt 0 ]
-@% then
-@%   stoposfiles=0
-@% else
-@%   stoposfiles=$STOPOS_PRESENT0
-@% fi
+@% The following macro generates a list of filenames that have in the past been added
+@% to the pool and that are still present in the intray. This list goes
+@% into \verb|old.infilelist|
+@% 
+@% @d update old.infilelist @{@%
+@% comm -12 old.infilelist infilelist >old_current.infilelist
+@% cp old_current.infilelist old.infilelist
 @% @| @}
-
-
-When there are no jobs, we can re-generate the Stopos pool without
-risk to confuse running processes. So, in this case, remove the
-stopos pool if it exists, remove \verb|old.infilelist| if it exists and
-generate a new pool.
-
-@d (re)generate stopos pool @{@%
-stopos -p $stopospool purge
-stopos -p $stopospool create
-rm -f old.infilelist
-@| @}
-
-
-Find the names of files that have been inserted in the pool and are
-still in the intray. Pre-requisite: \verb|filenames| and
-\verb|old.filenames| are both sorted. Replace \verb|old.filenames|
-with this list.
-
-@d update old.infilelist @{@%
-comm -12 old.infilelist infilelist >old_current.infilelist
-cp old_current.infilelist old.infilelist
-@| @}
-
-Find the names or the files that are in the intray but not yet in the
-pool. Replace \verb|new.filenames| with this list.
-
-@d generate new.infilelist @{@%
-comm -13 old.infilelist infilelist >new.infilelist
-@| @}
-
-@d add contents of new.infilelist to old.infilelist @{@%
-cat new.infilelist >>old.infilelist
-sort old.infilelist >old.infilelist.sorted
-mv old.infilelist.sorted old.infilelist
-@| @}
+@% 
+@% Find the names or the files that are in the intray but not yet in the
+@% pool. Replace \verb|new.filenames| with this list.
+@% 
+@% @d generate new.infilelist @{@%
+@% comm -13 old.infilelist infilelist >new.infilelist
+@% @| @}
+@% 
+@% @d add contents of new.infilelist to old.infilelist @{@%
+@% cat new.infilelist >>old.infilelist
+@% sort old.infilelist >old.infilelist.sorted
+@% mv old.infilelist.sorted old.infilelist
+@% @| @}
 
 
 @% @< make list  @>
@@ -498,19 +582,31 @@ mv old.infilelist.sorted old.infilelist
 @% @| @}
 
 
-When no jobs are running, the files in the proctray will never be
-annotated, so move them back to the intray.
+@% When no jobs are running, the files in the proctray will never be
+@% annotated, so move them back to the intray.
+@% 
+@% @d move  procfiles to intray @{@%
+@% if 
+@%   [ $old_procfiles_only -eq 0 ]
+@% then
+@%    find $proctray -type f -cmin +$maxproctime -print | sort  >oldprocfilelist
+@% else 
+@%   find $proctray -type f -print | sort >oldprocfilelist
+@% fi
+@% @| @}
+@% 
+@% However, when there are running jobs, move only the files that reside
+@% longer in the proctray than jobs can run.
+@% 
+@% @d move procfiles to intray @{@%
+@% comm  -23 old.filelist oldprocfilelist >temp.filelist
+@% mv temp.filelist old.filelist
+@% cat oldprocfilelist | xargs -iaap  bash -c 'movetotray aap $proctray $intray'
+@% @% find $proctray -type f -cmin +$maxproctime -print | xargs -iaap  bash -c 'movetotray aap $proctray $intray'
+@% @| @}
+@% 
 
-@d move all procfiles to intray @{@%
-find $proctray -type f -print | xargs -iaap  bash -c 'movetotray aap $proctray $intray'
-@| @}
 
-However, when there are running jobs, move only the files that reside
-longer in the proctray than jobs can run.
-
-@d move old procfiles to intray @{@%
-find $proctray -type f -cmin +$maxproctime -print | xargs -iaap  bash -c 'movetotray aap $proctray $intray'
-@| @}
 
 @d parameters @{@%
 maxproctime=m4_maxprocminutes

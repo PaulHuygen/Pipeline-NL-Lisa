@@ -3,8 +3,8 @@ m4_dnl
 m4_dnl Settings that are likely to vary
 m4_dnl
 m4_define(m4_walltime, 30:00)m4_dnl   Max duration of a job
-m4_define(m4_filesperjob, `30')m4_dnl
-m4_define(m4_maxjobs, `500')m4_dnl
+m4_define(m4_filesperjob, `100')m4_dnl
+m4_define(m4_maxjobs, `200')m4_dnl
 m4_define(m4_timeoutsecs, 1500)m4_dnl
 m4_define(m4_maxprocminutes, `30')m4_dnl
 m4_define(m4_logging, true)m4_dnl
@@ -58,6 +58,7 @@ m4_dnl
 m4_define(m4_stopospool, dppool)m4_dnl
 m4_define(m4_min_stoposfiles, 500)m4_dnl
 m4_define(m4_max_infile_number, 25000)m4_dnl
+m4_define(m4_sufficient_stopos_entries, 30000)m4_dnl
 m4_dnl
 m4_dnl Sematree
 m4_dnl
