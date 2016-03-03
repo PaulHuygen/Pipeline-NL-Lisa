@@ -302,7 +302,7 @@ mkdir -p $proctray
 @< count files in tray @(logtray@,logcount@) @>
 unreadycount=$((incount + $proccount))
 @< remove empty directories @>
-@| infilesexist incount proccount failcount logcount @}
+@| infilesexist incount proccount failcount logcount unreadycount @}
 
 @% \subsection{Reset if there are no files to be processed}
 @% \label{sec:reset}
