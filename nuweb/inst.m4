@@ -41,7 +41,7 @@ m4_define(m4_procdir, m4_adatadir/proc)m4_dnl
 m4_define(m4_timeouterr, 124)m4_dnl
 m4_dnl
 m4_define(m4_piperoot, `/home/phuijgen/nlp/nlpp')m4_dnl
-m4_define(m4_memperprocess, `4')m4_dnl
+m4_define(m4_memperprocess, `3')m4_dnl
 m4_define(m4_jobcountfile, m4_aprojroot/.jobcount)m4_dnl
 m4_define(m4_jobname, dutch_pipeline_job)m4_dnl
 m4_define(m4_logfile, m4_logdir/log)m4_dnl
