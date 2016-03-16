@@ -28,11 +28,14 @@ m4_include(texinclusions.m4)m4_dnl
 \begin{document}
 \maketitle
 \begin{abstract}
-  This is a description and documentation of a system that uses SurfSara's
-  supercomputer \href{https://userinfo.surfsara.nl/systems/lisa}{Lisa} to perform
-  large-scale linguistic annotation of dutch documents with
-  the 
-  \href{https://github.com/PaulHuygen/nlpp}{``Newsreader pipeline''}. 
+  This is a description and documentation of a system that uses
+  SurfSara's supercomputer
+  \href{https://userinfo.surfsara.nl/systems/lisa}{Lisa} to perform
+  large-scale \NLP{} annotation on Dutch or English documents. The
+  documents should have the size of typical newspaper-articles and
+  they should be formatted in the \NAF{} format. The
+  annotation-pipeline can be found on
+  \href{https://github.com/PaulHuygen/nlpp}{``Newsreader pipeline''}.
 \end{abstract}
 \tableofcontents
 
@@ -44,9 +47,9 @@ of documents, using supercomputer
 \href{https://userinfo.surfsara.nl/systems/lisa}{Lisa}. Lisa is a
 computer-system co-owned by the Vrije Universiteit Amsterdam. This
 document is especially useful for members of the Computational
-Lexicology and Terminology Lab (\CLTL{}) who have access to that
-computer. Currently, the dopcuments to be processed have to be encoded
-in the \emph{NLP Annotation Format}
+Lexicology and Terminology Lab (\CLTL{}) of the Vrije Universiteit
+Amsterdam who have access to that computer. Currently, the documents
+to be processed have to be encoded in the \emph{NLP Annotation Format}
 (\href{https://github.com/newsreader/NAF}{\NAF}).
 
 The annotation of the documents will be performed by a ``pipeline''
@@ -64,11 +67,17 @@ Quick user instruction:
 \item Clone the software from Github. This results in a directory-tree
   with root \verb|m4_progname|.
 \item ``cd'' to \verb|m4_progname|.
-\item Create a subdirectory \verb|in| and fill it with (a
+\item Create a subdirectory \verb|data/in| and fill it with (a
   directoy-structure containing) raw \NAF's
   that have to be annotated.
 \item Run script \verb|runit|.
-\item Wait until it has finished.
+\item Repeat to run \verb|runit| on a regular bases (e.g. twice per
+  hour) until subdirectory \verb|data/in/| and subdirectory
+  \verb|data/proc| are both empty.
+\item The annotated \NAF{} files can be found in
+  \verb|data/out|. Documents on which the annotation failed
+  (e.g. because the annotation took too much time) have been moved to
+  directory \verb|data/fail|.  
 \end{enumerate}
 
 The following is a demo script that performs the installation and
@@ -96,7 +105,8 @@ cp $xampledir/*.naf data/in/
 \subsubsection{Moving files around}
 \label{sec:filestructure}
 
-The \NAF{} files and the logfiles are stored in the following subdirectories of the \verb|data|:
+The \NAF{} files and the logfiles are stored in the following
+subdirectories of the \verb|data| subdirectory:
 
 \begin{description}
 \item[in:] To store the input \NAF{}'s.
@@ -116,7 +126,8 @@ processing this document has been started.
 
 When the job is not able to perform processing to completion
 (e.g. because it is aborted), the \NAF{} file remains in the
-\verb|proc| subdirectory. A management script moves \NAF{} of which
+\verb|proc| subdirectory. At regular intervals a management script
+runs, and this moves \NAF{}'s of which
 processing has not been completed back to \verb|in|.
 
 While processing a document, a job generates log information and
@@ -124,7 +135,7 @@ stores this in a log file with the same name as the input \NAF{} file
 in directory \verb|log|. If processing fails, the job moves the
 input \NAF{} file from \verb|proc| to
 \verb|fail|. Otherwise, the job stores the output \NAF{} file in
-\verb|out| and removes the input \NAF{} file from \verb|proc| 
+\verb|out| and removes the input \NAF{} file from \verb|proc|.
 
 @d parameters @{@%
 export walltime=m4_walltime
