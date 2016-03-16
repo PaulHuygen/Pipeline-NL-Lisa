@@ -16,7 +16,7 @@ m4_dnl Titles
 m4_dnl
 m4_define(m4_progname, `Pipeline_NL_Lisa')m4_dnl
 m4_define(m4_progrepo, `https://github.com/PaulHuygen/Pipeline-NL-Lisa.git')m4_dnl
-m4_define(m4_doctitle, `Standardised Dutch NLP pipeline')m4_dnl
+m4_define(m4_doctitle, `NLP-annotate documents on Surfsara's Lisa computer')m4_dnl
 m4_define(m4_docdate, `\today \\ m4_time_of_day~h.')m4_dnl
 m4_define(m4_author, `Paul Huygen <paul.huygen@@huygen.nl>')m4_dnl
 m4_define(m4_subject, `Standardised Dutch pipeline')m4_dnl
