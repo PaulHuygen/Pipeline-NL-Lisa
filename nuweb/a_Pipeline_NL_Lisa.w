@@ -815,15 +815,18 @@ rm $joblist
 
 If there are more running than \verb|jobcount| lists, something is
 wrong. The best we can do in that case is to make \verb|jobcount|
-equal to \verb|running_jobs|.
+equal to \verb|running_jobs|. The same repair must be performed when
+\verb|jobcount| reports that there are jobs around while Sara
+maintains that this isn't the case.
 
 @d count jobs @{@%
 if
-  [ $running_jobs -gt $jobcount ]
+  [ $running_jobs -gt $jobcount ] || [ $running_jobs -eq 0 ]
 then
   jobcount=$running_jobs
 fi
 @| @}
+
 
 
 Currently we aim at one job per m4_filesperjob waiting files.
@@ -1399,13 +1402,13 @@ function apply_english_pipeline {
   runmodule top.naf      $BIND/pos               pos.naf
   runmodule pos.naf      $BIND/constpars         consp.naf
   runmodule consp.naf    $BIND/nerc              nerc.naf
-  runmodule nerc.naf     $BIND/ned               ned.naf
+  runmodule nerc.naf     $BIND/coreference-base  coref.naf
+  runmodule coref.naf    $BIND/ned               ned.naf
   runmodule ned.naf      $BIND/nedrer            nedr.naf
   runmodule nedr.naf     $BIND/wikify            wikif.naf
   runmodule wikif.naf    $BIND/ukb               ukb.naf
   runmodule ukb.naf      $BIND/ewsd              ewsd.naf
-  runmodule ewsd.naf     $BIND/coreference-base  coref.naf
-  runmodule coref.naf    $BIND/eSRL              esrl.naf
+  runmodule ewsd.naf     $BIND/eSRL              esrl.naf
   runmodule esrl.naf     $BIND/FBK-time          time.naf
   runmodule time.naf     $BIND/FBK-temprel       trel.naf
   runmodule trel.naf     $BIND/FBK-causalrel     crel.naf
