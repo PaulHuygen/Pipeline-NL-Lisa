@@ -1238,18 +1238,25 @@ exec 6>&-
 
 Our pipeline is currently bi-lingual. Only documents in Dutch or
 English can be annotated. The language is specified as argument in the
-\verb|NAF| tag. The pipeline installation contains a script that
+\verb|NAF| tag. The pipeline installation contains a Python script that
 returns the language of the document in the \NAF{}. Put the language
 in variable \verb|naflang|.
 
 Select the model that the Nerc module has to use, dependent of the language.
 
 @d retrieve the language of the document  @{@%
-naflang=`cat @1 | m4_pipelineroot/bin/langdetect`
+naflang=`cat @1 | python m4_pipelineroot/env/bin/langdetect.py`
 export naflang
 #
 @< set nercmodel @>
 @| naflang @}
+
+By the way, the python script uses Python 2.7, so let us import the
+corresponding module.
+
+@d load python module @{@%
+module load python/2.7.9
+@| @}
 
 @d set nercmodel @{@%
 if
@@ -1652,6 +1659,7 @@ export jobname=$PBS_JOBID
 @% passeer
 @% veilig
 @< load stopos module @>
+@< load python module @>
 @< functions @>
 @< functions in the jobfile @>
 check_start_spotlight nl
