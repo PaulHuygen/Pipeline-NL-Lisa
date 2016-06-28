@@ -54,7 +54,11 @@ to be processed have to be encoded in the \emph{NLP Annotation Format}
 
 The annotation of the documents will be performed by a ``pipeline''
 that has been set up in the
-Newsreader-project~\footnote{http://www.newsreader-project.eu}. 
+Newsreader-project~\footnote{http://www.newsreader-project.eu}. The
+installation of this pipeline is performed by script that can be
+obtained from
+\href{https://github.com/PaulHuygen/nlpp}{Github}.
+
 
 \subsection{How to use it}
 \label{sec:usage}
@@ -67,8 +71,9 @@ Quick user instruction:
 \item Clone the software from Github. This results in a directory-tree
   with root \verb|m4_progname|.
 \item ``cd'' to \verb|m4_progname|.
+\item Run \verb|stripnw| and \verb|nuweb| 
 \item Create a subdirectory \verb|data/in| and fill it with (a
-  directoy-structure containing) raw \NAF's
+  directory-structure containing) raw \NAF's
   that have to be annotated.
 \item Run script \verb|runit|.
 \item Repeat to run \verb|runit| on a regular bases (e.g. twice per
@@ -80,22 +85,6 @@ Quick user instruction:
   directory \verb|data/fail|.  
 \end{enumerate}
 
-The following is a demo script that performs the installation and
-annotates a set of texts:
-
-@o ../demoscript @{@%
-#!/bin/bash
-gitrepo=m4_progrepo
-xampledir=/home/phuijgen/nlp/data/examplesample/
-#
-git clone $gitrepo
-cd m4_progname
-mkdir -p data/in
-mkdir -p data/out
-cp $xampledir/*.naf data/in/
-./runit
-@| @}
-
 @% \section{Elements of the job}
 @% \label{sec:elements}
 
@@ -105,25 +94,37 @@ cp $xampledir/*.naf data/in/
 \subsubsection{Moving files around}
 \label{sec:filestructure}
 
+The system expects a subdirectory \verb|data| and a subdirectory \verb|data/in| in it's root
+directory. It expects the \NAF{} files to be processed to reside in
+\verb|data/in|, possibly distributed up in a directory-structure below
+\verb|data/in|.
 The \NAF{} files and the logfiles are stored in the following
 subdirectories of the \verb|data| subdirectory:
 
 \begin{description}
-\item[in:] To store the input \NAF{}'s.
 \item[proc:] Temporary storage of the input files while they are being processed.
 \item[fail:] For the input \NAF's that could not be processed.
-\item[log:] For logfiles.
-\item[out] The annotated files appear here.
+\item[log:]  For logfiles.
+\item[out:]  The annotated files appear here.
 \end{description}
 
-The user stores the raw \NAF{} files in directory \verb|data/in|. She
-may construct a structure with subdirectories in \verb|data/in| that
-contain the \NAF{} files. If she does that, the system copies this
-file-structure in the other subdirectories of \verb|data|.  Processing
-the files is performed by jobs. Before a job processes a document, it
-moves the document from \verb|in| to \verb|proc|, to indicate that
-processing this document has been started.
+From now on we will call these directories \emph{trays} (e.g. intray, proctray).
 
+if \verb|data/in| has a directory-substructure, the structure is
+copied in the other directories. In other words, when there exists a
+file \verb|data/in/aap/noot/mies.naf|, the system generates the
+annotated naf \verb|data/out/aap/noot/mies.naf| and
+logfile\verb|data/log/aap/noot/mies.naf| (although the latter is not in
+\NAF{} format). When processing fails, the system does not generate 
+\verb|data/out/aap/noot/mies.naf|, but it moves
+\verb|data/in/aap/noot/mies.naf| to  \verb|data/fail/aap/noot/mies.naf|.
+
+The file in the log-tray contains the error-output that the
+\NLP-modules generated when they operated on the \NAF{}. 
+
+Processing the files is performed by jobs. Before a job processes a
+document, it moves the document from \verb|data/in| to \verb|data/proc|, to
+indicate that processing this document has been started.
 When the job is not able to perform processing to completion
 (e.g. because it is aborted), the \NAF{} file remains in the
 \verb|proc| subdirectory. At regular intervals a management script
@@ -138,63 +139,34 @@ input \NAF{} file from \verb|proc| to
 \verb|out| and removes the input \NAF{} file from \verb|proc|.
 
 @d parameters @{@%
-export walltime=m4_walltime
+@% export walltime=m4_walltime
 export root=m4_aprojroot
 export intray=m4_indir
 export proctray=m4_procdir
 export outtray=m4_outdir
 export failtray=m4_faildir
 export logtray=m4_logdir
-@| walltime root intray outtray failtray logtray @}
+@| root intray outtray failtray logtray @}
 
 
-\subsubsection{Managing the documents with Stopos}
-\label{sec:docmanagement}
 
-The processes in the jobs that do the work pick \NAF{} files from \verb|data/in|
-in order to process them. There must be a system that arranges that
-each \NAF{} file is picked up by only one job-process. To do this, we
-use the
-\href{https://userinfo.surfsara.nl/systems/lisa/software/stopos}{``Stopos''}
-system that is implemented in Lisa. A management script makes a list
-of the files in \verb|\data\in| and passes it to a ``stopos
-pool'' where the work processes can find them.
+\subsubsection{Management-script}
+\label{sec:management-script}
 
-Periodically the management script moves unprocessed documents from
-\verb|data/proc| to \verb|data/in| and regenerate the infilelist in the
-Stopos pool.
+When a user has put \NAF{} files in \verb|data/in|, something has to
+take care of starting jobs ot annotate the files and moving abandoned
+files from the proctray back to the intray. This is performed by a
+script named \verb|runit|, that should be started from time to
+time. When there are files present in the intray, runit should
+be started 2-3 times per hour.
 
-A list of files to be processed is called a ``Stopos pool''. 
+\subsubsection{The NLP-modules}
+\label{sec:modulelist}
 
-@d parameters @{@%
-export stopospool=m4_stopospool
-@| stopospool @}
+In the annotation process a series of \NLP{} modules operate in
+sequence on the \NAF{}. The annotation-process is described in
+section~\ref{sec:perform}. 
 
-Load the stopos module in a script:
-
-@d load stopos module @{@%
-module load stopos
-@| stopos module @}
-
-\subsubsection{Management script}
-\label{sec:managementscript}
-
-A management script \verb|runit| set the system to work and keep
-the system working until all input files have been processed until either
-successful completion or failure. The script must run periodically in
-order to restore unfinished input-files from \verb|data/proc| to
-\verb|data/in| and to submit enough jobs to the job-system.
-
-\subsubsection{Job script}
-\label{sec:jobscript}
-
-The management-script submits a Bash script as a job to the
-job-management system of Lisa. The script contains special parameters
-for the job system (e.g. to set the maximum processing time). It
-generate a number of parallel processes that do the work.
-
-To enhance flexibility the job script is generated from a template
-with the M4 pre-processor.
 
 \subsubsection{Set parameters}
 \label{sec:parameters}
@@ -208,7 +180,7 @@ parameters values
 @| @}
 
 
-\section{Files}
+\section{File management}
 \label{sec:files}
 
 Viewed from the surface, what the pipeline does is reading, creating,
@@ -312,8 +284,25 @@ mkdir -p $proctray
 @< count files in tray @(failtray@,failcount@) @>
 @< count files in tray @(logtray@,logcount@) @>
 unreadycount=$((incount + $proccount))
-@< remove empty directories @>
 @| infilesexist incount proccount failcount logcount unreadycount @}
+
+@d count files in tray @{@%
+@2=`find $@1 -type f -print | wc -l`
+@| @}
+
+
+The processes empty the directory-structure in the intray and the
+proctray. So, it might be a good idea to clean up the
+directory-structure itself.
+
+@d check/create directories @{@%
+find $intray -depth -type d -empty -delete
+find $proctray -depth -type d -empty -delete
+mkdir -p $intray
+mkdir -p $proctray
+@| @}
+
+
 
 @% \subsection{Reset if there are no files to be processed}
 @% \label{sec:reset}
@@ -339,17 +328,7 @@ unreadycount=$((incount + $proccount))
 
 
 
-@d count files in tray @{@%
-@2=`find $@1 -type f -print | wc -l`
-@| @}
 
-Remove empty directories in the intray and the proctray.
-@d remove empty directories @{@%
-find $intray -depth -type d -empty -delete
-find $proctray -depth -type d -empty -delete
-mkdir -p $intray
-mkdir -p $proctray
-@| @}
 
 \subsection{Generate pathnames}
 \label{sec:generatefilenames}
@@ -372,18 +351,57 @@ export logpath=${logfile%/*}
 \subsection{Manage list of files in Stopos}
 \label{sec:manage-by-stopos}
 
+The processes in the jobs that do the work pick \NAF{} files from
+\verb|data/in| in order to process them. There must be a system that
+arranges that each \NAF{} file is picked up only once, by only one
+job-process. To do this, we use the
+\href{https://userinfo.surfsara.nl/systems/lisa/software/stopos}{``Stopos''}
+system that has been implemented in Lisa. The management script makes a list
+of the files in \verb|\data\in| and passes it to a ``stopos pool''
+where the work processes can find them.
+
+A difficulty is, that there is no way to look into stopos, other than
+to pick a file. The intended way of using Stopos is, to fill it with a
+given set of parameters and then start jobs that process the
+parameters one-by-one until there are no unused parameters left. In
+our system however, we would like to add new input-files while the
+system is already working, and there is no direct way to tell whether
+the name of a given input-file has already been added to Stopos or
+not. Therefore we need a kind of shadow-bookkeeping, listing the files
+that have already been added to Stopos and removing processed files
+from the list.
+
+In order to be able to use stopos, first we have to ``load'' the
+``stopos module'':
+
+@d load stopos module @{@%
+module load stopos
+@| stopos module @}
+
+A list of parameters like the filenames in our problem is called a
+``Stopos pool''. Give our pool a name:
+
+@d parameters @{@%
+export stopospool=m4_stopospool
+@| stopospool @}
+
+
+
 \subsubsection{Set up/reset pool}
 \label{sec:poolsetup}
 
-The processes obtain the names of the files to be processed from
-Stopos. Adding large amount of filenames to the stopos pool take much
-time, so this must be done sparingly. We do it as follows:
+In this section filenames are added to the Stopos pool.
+Adding a large amount of filenames takes much
+time, so we do this sparingly. We do it as follows:
 \begin{enumerate}
 \item First look how many filenames are still available in the
-  pool. If the pool is empty, or there are no files in the intray, or
-  there are no jobs, the pool must be renewed. On the other hand,
-  if there are still lots of filenames in it, we can leave the pool alone.
-\item If the pool is running out, something has to be done:
+  pool. If there are still sufficient filenames in the pool to keep
+  the jobs working for the next half hour, we do nothing. On the other
+  hand. If the pool is empty, we renew it (i.e. purge it and
+  re-generate a new, empty pool). In this way the contents of the pool
+  is aligned with the shadow-bookkeeping of the filenames. Also when
+  there are no jobs or when there are no files in the intray, we renew
+  the pool. If the pool is running out, we add filenames to the pool. 
 \item Generate a file \verb|infilelist| that contains the paths to the files in
   the intray.
 \item Assume file \verb|old.filenames|, if it exists, contains the
@@ -397,35 +415,12 @@ time, so this must be done sparingly. We do it as follows:
   in the proctray for a longer time than jobs are allowed to run.
 \item Make file \verb|infilelist| that lists files that are
   currently in the intray.
-\item Check whether the listed filenames are present in
-  \verb|old.filenames| and remove them from  \verb|infilelist| when
-  that is the case. Put the result in  \verb|new.filenames|.
-\item Add the files in \verb|new.filenames| to the pool.
-\item Add the content of \verb|new.filenames| to \verb|old.filenames|.
+\item Remove the filenames that can also be found in
+  \verb|old.infilelist| from \verb|infilelist|. After that
+  \verb|infilelist| contains names of files that are not yet in the pool. 
+\item Add the files in \verb|infilelist| to the pool.
+\item Add the content of \verb|infilelist| to \verb|old.infilelist|.
 \end{enumerate}
-
-It seems that the file-bookkeeping that is external is sometimes
-flawed and therefore we renew the pool as often as we can.
-
-
-When we run the job -manager twice per hour, Stopos needs to contain
-enough filenames to keep Lisa working for the next half hour. Probably
-Lisa's job-control system does not allow us to run more than 100 jobs
-at the same time. Typically a job runs seven parallel processes. Each
-process will probably handle at most one \NAF{} file per minute. That
-means, that if stopos contains $100 \times 7 \times 30 = 21 10^{3}$
-filenames, Lisa can be kept working for half an hour.
-
-First let us see whether we will update the existing pool or purge and
-renew it. We renew it:
-\begin{enumerate}
-\item When there are no files in the intray, so the pool ought to be empty;
-\item When there are no jobs around, so renewing the pool does not
-  interfere with jobs running.
-\item When the pool status tells us that the pool is empty.
-\end{enumerate}
-
-
 
 
 @d update the stopos pool @{@%
@@ -443,11 +438,37 @@ fi
 @|pool_full pool_empty @}
 
 
-The following macro sets the first argument variable to ``1'' if the pool
-does not exist or if it contains less then
+
+When we run the job -manager twice per hour, Stopos needs to contain
+enough filenames to keep Lisa working for the next half hour. Probably
+Lisa's job-control system does not allow us to run more than 100 jobs
+at the same time. Typically a job runs seven parallel processes. Each
+process will probably handle at most one \NAF{} file per minute. That
+means, that if stopos contains $100 \times 7 \times 30 = 21 \times 10^{3}$
+filenames, Lisa can be kept working for half an hour. Let's round this
+number to m4_sufficient_stopos_entries.
+
+
+First let us see whether we will update the existing pool or purge and
+renew it. We renew it:
+\begin{enumerate}
+\item When there are no files in the intray, so the pool ought to be empty;
+\item When there are no jobs around, so renewing the pool does not
+  interfere with jobs running:
+\item When the pool status tells us that the pool is empty.
+\end{enumerate}
+
+
+The following macro sets the first argument variable (\verb|pool-full|) to ``1'' if the
+pool does not exist or if it contains less then
 m4_sufficient_stopos_entries filenames. Otherwise, it sets the
 variable to ``0'' (true). It sets the second argument variable similar
 when there no filenames left in the pool.
+
+@d parameters @{@%
+stopos_sufficient_filecount=m4_sufficient_stopos_entries
+@|stopos_sufficient_filecount @}
+
 
 @d is the pool full or empty? @{@%
 @1=1
@@ -458,7 +479,7 @@ if
   [ \$result -eq 0 ]
 then
   if
-    [ $STOPOS_PRESENT0 -gt m4_sufficient_stopos_entries ]
+    [ $STOPOS_PRESENT0 -gt $stopos_sufficient_filecount ]
   then
     @1=0
   fi
@@ -472,24 +493,28 @@ fi
 
 @d  make a list of filenames in the intray @{@%
 find \$intray -type f -print | sort >infilelist
-intraysize=`cat infilelist | wc -l`
-@| infilelist intraysize @}
+@| infilelist @}
 
 
 
 Note that variable \verb|jobcount| needs to be known before running
-the following macro. When variable \verb|regen_pool_condtion| is equal
-to zero, the pool has to be renewed.
+the following macro. The macro set variable
+\verb|regen_pool_condition| to \verb|true| (i.e. zero) when the
+conditions renew the pool are fulfilled.
 
 @d decide whether to renew the stopos-pool @{@%
 cd $root
 regen_pool_condition=1
 if
-  [ \$intraysize -eq 0 ] || [ \$jobcount -eq 0 ] || [ \$pool_empty -eq 0 ]
+  [ \$incount -eq 0 ] || [ \$jobcount -eq 0 ] || [ \$pool_empty -eq 0 ]
 then
   regen_pool_condition=0
 fi
 @| regen_pool_condition @}
+
+When the conditions are fulfilled, make a new pool and empty
+\verb|old.infileist|. Otherwise, remove from \verb|old.infilelist| the
+names of files that are no longer present in the intray.
 
 @d clean up pool and old.filenames @{@%
 if
@@ -505,8 +530,10 @@ fi
 
 @| @}
 
-Remove from \verb|old.filelist| the names of files that are no longer
-in the intray.
+Update the content of \verb|old.infilelist| so that, as far as we know, it contains only
+names of files that are still in the pool. Update \verb|infilelist|
+so that it only contains names of files that reside in the intray but
+not yet in the pool.
 
 @d clean up old.infilelist @{@%
 comm -12 old.infilelist infilelist >temp.infilelist
@@ -518,7 +545,9 @@ cp temp.infilelist infilelist
 Make a list of names of files in the proctray that should be moved to
 the intray, either because they reside longer in the proctray than the
 lifetime of jobs or because there are no running jobs.  Move the files
-in the list back to the intray and add the list to \verb|infilelist|. \textbf{Note:} that after this \verb|infilelist| is no longer sorted.
+in the list back to the intray and add the list to
+\verb|infilelist|. \textbf{Note:} that after this \verb|infilelist| is
+no longer sorted.
 
 @d clean up proctray @{@%
 if
@@ -641,7 +670,7 @@ maxproctime=m4_maxprocminutes
 \subsubsection{Get a filename from the pool}
 \label{sec:getfilename}
 
-To get a filename from Stopos perform:
+To get a filename from Stopos, perform:
 
 \begin{verbatim}
   stopos -p $stopospool next
@@ -656,15 +685,29 @@ Get next input-file from stopos and put its full path in variable
 \verb|infile|. If Stopos is empty, put an empty string in
 \verb|infile|.
 
+It seems that sometimes stopos produces the name of a file that is not
+present in the intray. In that case, get another filename from Stopos.
+
 @d get next infile from stopos @{@%
-stopos -p $stopospool next
-if
-  [ "$STOPOS_RC" == "OK" ]
-then
-   infile=$STOPOS_VALUE
-else
-  infile=""
-fi
+repeat=0
+while 
+  [ $repeat ]
+do
+  stopos -p $stopospool next
+  if
+    [ ! "$STOPOS_RC" == "OK" ]
+  then
+    infile=""
+    repeat=1
+  else
+    infile=$STOPOS_VALUE
+    if
+      [ -e "$infile" ]
+    then
+      repeat=1
+    fi
+  fi
+done
 @| @}
 
 
@@ -764,12 +807,11 @@ following:
 
 Find out how many submitted jobs there are and how many of them are
 actually running. Lisa supplies an instruction \verb|showq| that
-produces a list of running and waiting jobs. Unfortunately, it seems
-that this instruction shows only the running jobs in job
-arrays. Therefore we need to make job bookkeeping.
+produces a list of running and waiting jobs. However, the list is not
+always complete. Therefore we need to make job bookkeeping.
 
 File \verb|jobcounter| lists the number of jobs. When extra jobs are
-submitted, the number is increased. When logfiles are found that job
+submitted, the number is increased. When logfiles are found that jobs
 produce when they end, the number is decreased. 
 
 @d count jobs @{@%
@@ -824,7 +866,7 @@ rm $joblist
 @| running_jobs total_jobs_qn @}
 
 
-If there are more running than \verb|jobcount| lists, something is
+If \verb|showq| reports more jobs than \verb|jobcount| lists, something is
 wrong. The best we can do in that case is to make \verb|jobcount|
 equal to \verb|running_jobs|. The same repair must be performed when
 \verb|jobcount| reports that there are jobs around while Sara
@@ -832,9 +874,9 @@ maintains that this isn't the case.
 
 @d count jobs @{@%
 if
-  [ $running_jobs -gt $jobcount ] || [ $running_jobs -eq 0 ]
+  [ $total_jobs -gt $jobcount ] || [ $total_jobs -eq 0 ]
 then
-  jobcount=$running_jobs
+  jobcount=$total_jobs
 fi
 @| @}
 
@@ -920,6 +962,17 @@ cat m4_jobname<!!>.m4 >>job.m4
 cat job.m4 | m4 -P >m4_jobname
 # rm job.m4
 @| @}
+
+
+A wall-time of 30 minutes seems suitable for the jobs. It is
+sufficiently large to be productive and it is small enough to be
+scheduled flexible in the job-system of Lisa.
+
+@d parameters @{@%
+export walltime=m4_walltime
+@| walltime @}
+@| @}
+
 
 
 Submit the jobscript. The argument is the number of times that the
@@ -1066,7 +1119,19 @@ cores and the amount of memory that is available.
 The stopos module, that we use to synchronize file management,
 supplies the instructions \verb|sara-get-num-cores| and
 \verb|sara-get-mem-size| that return the number of cores resp. the
-amount of memory of the computer that hosts the job. \textbf{Note}
+amount of memory of the computer that hosts the job.
+
+Actually we could do with a more accurate estimation of the amount of
+memory that is available for the processes. Sometimes we need to
+install Spotlight servers and sometimes we can use external
+servers. The same goes for the \verb|e-SRL| server. It would be better
+if we could measure how much memory is actually available.
+
+
+
+
+
+\textbf{Note}
 that the stopos module has to be loaded before the following macro can
 be executed succesfully.
 
@@ -1097,11 +1162,17 @@ then
 else
   maxprocs=ncores
 fi
-@| maxprogs @}
+@| maxprocs @}
 
 
 \subsection{Start parallel processes}
 \label{sec:start_processes}
+
+After determining how many parallel processes we can run, start
+processes as Bash subshells. If it turns out that processes have no
+work to do, they die. In that case, the job should die too. Therefore
+a processes-counter registers the number of running processes. When
+this has reduced to zero, the macro expires.
 
 @d run parallel processes @{@%
 @< determine amount of memory and nodes @>
@@ -1143,21 +1214,24 @@ done
 @| @}
 
 
-\section{Apply the pipeline}
-\label{sec:pipeline}
+\section{Servers}
+\label{sec:servers}
 
-This section finally deals with the essential purpose of this
-software: to annotate a document with the modules of the pipeline.
+Some \NLP{}-modules need to consult a Spotlight-server. If possible,
+we will use an existing server somewhere on the Internet, but if this
+is not possible we will have to set up our own Spotlight server.
 
-The pipeline is installed in directory \verb|m4_pipelineroot|. For
-each of the modules there is a script in subdirectory \verb|bin|.
+The \eSRL{} module has been built as a server-client structure, hence
+we have to set up this server too.
 
-@d parameters @{@%
-export pipelineroot=m4_pipelineroot
-export BIND=$pipelineroot/bin
-@| @}
+We have the following todo items:
 
-
+\begin{enumerate}
+\item Determine the amount of free memory after the servers have been
+  installed in order to calculate the number of parallel processes
+  that we can start.
+\item Look whether the \eSRL{} server can be installed externally as well.
+\end{enumerate}
 
 
 \subsection{Spotlight server}
@@ -1202,7 +1276,7 @@ function check_start_spotlight {
   export spotlighthost
   export spotlightrunning
 }
-@| @}
+@| spotlighthost spotlightrunning @}
 
 
 @d functions in the jobfile @{@%
@@ -1232,6 +1306,22 @@ spotlightrunning=$?
 exec 6<&-
 exec 6>&-
 @| @}
+
+\section{Apply the pipeline}
+\label{sec:pipeline}
+
+This section finally deals with the essential purpose of this
+software: to annotate a document with the modules of the pipeline.
+
+The pipeline is installed in directory \verb|m4_pipelineroot|. For
+each of the modules there is a script in subdirectory \verb|bin|.
+
+@d parameters @{@%
+export pipelineroot=m4_pipelineroot
+export BIND=$pipelineroot/bin
+@| @}
+
+
 
 \subsection{Language of the document}
 \label{sec:language}
@@ -1279,8 +1369,8 @@ standard in and produces annotated \NAF{}-encoded document on standard
 out, if all goes well. The exit-code of the module-script can be used
 as indication of the success of the annotation.
 
-To prevent that modules are applied on the result of a failed
-annotation by a previous module, the exit code will be stored in
+To prevent that modules operate on the result of failed operation of a 
+a previous module, the exit code will be stored in
 variable \verb|moduleresult|. 
 
 The following function applies a module on the input naf file, but
@@ -1345,8 +1435,8 @@ export moduleresult=0
 
 When a process has obtained the name of a \NAF{} file to be processed
 and has generated filenames for the input-, proc-, log-, fail- and
-output files (section~\ref{sec:generatefilenames}, it can start
-process the file:
+output files (section~\ref{sec:generatefilenames}), it can start to
+process the file. Note the timeout instruction:
 
 @d process infile @{@%
 movetotray $infile $intray $proctray
