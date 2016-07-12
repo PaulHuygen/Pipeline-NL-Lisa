@@ -1,5 +1,5 @@
 m4_include(inst.m4)m4_dnl
-m4_sinclude(local.m4)m4_dnl
+m4_sinclude(../../local_Pipeline_NL_Lisa.m4)m4_dnl
 \documentclass[twoside,oldtoc]{artikel3}
 @% \documentclass[twoside]{article}
 \pagestyle{headings}
@@ -20,6 +20,7 @@ m4_sinclude(local.m4)m4_dnl
 \newcommand{\NER}{\textsc{ner}}
 \newcommand{\NLP}{\textsc{nlp}}
 \newcommand{\SRL}{\textsc{srl}}
+\newcommand{\eSRL}{e\textsc{srl}}
 \def\CaptionTextFont{\small\slshape}
 \title{\thedoctitle}
 \author{\theauthor}
@@ -558,8 +559,9 @@ else
   find $proctray -type f -cmin +$maxproctime -print | sort  >oldprocfilelist
 fi
 cat oldprocfilelist | xargs -iaap  bash -c 'movetotray aap $proctray $intray'
-cat infilelist oldprocfilelist >temp.infilelist
-mv temp.infilelist infilelist
+gawk '{gsub(PROCTRAY, INTRAY); print}' PROCTRAY=$proctray INTRAY=$intray <oldprocfilelist >>infilelist
+@% cat infilelist oldprocfilelist >temp.infilelist
+@% mv temp.infilelist infilelist
 @| @}
 
 Add the names of the files in the intray that are not yet in the pool
@@ -691,7 +693,7 @@ present in the intray. In that case, get another filename from Stopos.
 @d get next infile from stopos @{@%
 repeat=0
 while 
-  [ $repeat ]
+  [ $repeat -eq 0 ]
 do
   stopos -p $stopospool next
   if
@@ -874,9 +876,9 @@ maintains that this isn't the case.
 
 @d count jobs @{@%
 if
-  [ $total_jobs -gt $jobcount ] || [ $total_jobs -eq 0 ]
+  [ $total_jobs_qn -gt $jobcount ] || [ $total_jobs_qn -eq 0 ]
 then
-  jobcount=$total_jobs
+  jobcount=$total_jobs_qn
 fi
 @| @}
 
@@ -971,7 +973,6 @@ scheduled flexible in the job-system of Lisa.
 @d parameters @{@%
 export walltime=m4_walltime
 @| walltime @}
-@| @}
 
 
 
@@ -1427,6 +1428,42 @@ Initialise \verb|moduleresult| with value 0:
 export moduleresult=0
 @|moduleresult @}
 
+\subsection{The eSRL server}
+\label{sec:eSRL-server}
+
+One of the modules, \verb|eSRL|, is a bit problematic, because it runs
+as a client-server-system, hence we need to start-up the server. We
+choose to start up the server beforehand, although it will occupy
+memory, even if it will never be used in Dutch documents.  
+
+The \verb|nlpp| package contans a script, \verb|bin/start_eSRL| that
+does this. A complication is, that for some reason the script expects
+either that the variable \verb|naflang| has been set, or that it can
+read a \NAF{} file from standard in, so that it can determine this
+variable by itself. 
+
+We start the srl server at the beginning of the job and we do not wait
+intil it runs, hoping that it will be running by the time that the
+first eSRL client starts its work.
+
+Note that we need to override the location of the ``pidfile'' that
+will contain the process-id of the server. The default location is in
+a subdirectory of the nlpp tree, but we need it to be on the local
+file-system of the node on which the job runs. Furthermore, we have to
+override the directory that the semaphore script in nlpp uses to gain
+or release exclusive access.
+
+@d set local parameters in the job @{@%
+export eSRL_piddir=`mktemp -d -t eSRL_piddir.XXXXXX`
+export semaworkdir=`mktemp -d -t sema.XXXXXX`
+@| @}
+
+
+@d Start the bloody eSRL server @{@%
+piddir=`mktemp -d -t piddir.XXXXXXX`
+( export naflang="en" ; $BIND/start_eSRL $piddir ) &
+@| piddir @}
+ 
 
 
 
@@ -1439,39 +1476,60 @@ output files (section~\ref{sec:generatefilenames}), it can start to
 process the file. Note the timeout instruction:
 
 @d process infile @{@%
+export nlppscript=\$BIND/nlpp
 movetotray $infile $intray $proctray
 mkdir -p $outpath
 mkdir -p $logpath
-export TEMPDIR=`mktemp -d -t nlpp.XXXXXX`
-cd $TEMPDIR
+@% export TEMPDIR=`mktemp -d -t nlpp.XXXXXX`
+@% cd $TEMPDIR
+export TEMPRES=`mktemp -t tempout.XXXXXX`
 @< retrieve the language of the document @($procfile@) @>
 moduleresult=0
-timeout m4_timeoutsecs $root/apply_pipeline
+@% timeout m4_timeoutsecs $root/apply_pipeline
+timeout m4_timeoutsecs bash -c "(cat \$procfile | $nlppscript > $TEMPRES)"
 pipelineresult=$?
 @< move the processed naf around @>
 cd $root
-rm -rf $TEMPDIR
+rm -f $TEMPRES
 @| pipelineresult timeout @}
 
 We need to set a time-out on processing, otherwise documents that take
 too much time keep being recycled between the intray and the
 proctray. The bash timeout function executes the instruction that is
 given as argument in a subshell. Therefore, execute processing in a
-separate script. The subshell knows the exported parameters in the
-environment from which the timeout instruction has been executed.
+separate script, \verb|apply_pipeline|. This script inherits the
+exported parameters from the
+environment from which the timeout instruction has been executed. In
+other words, it knows about \verb|infile|, \verb|procfile| etc.
+
+The script applies the \verb|nlpp| script on the input-file. 
 
 @o m4_projroot/apply_pipeline @{@%
 #!/bin/bash
-@< functions in the pipeline-file @>
-
-cd $TEMPDIR
+export pipelinescript=m4_pipelineroot/bin/nlpp
+outtmp=`mktemp -t outtmp.XXXXXX`
+@% @< functions in the pipeline-file @>
+cat \$procfile | \$pipelinescript > \$outtmp
+result=\$?
 if
-  [ "$naflang" == "nl" ]
+  [ \$result -eq 0 ]
 then
-   apply_dutch_pipeline
+  mv \$outtmp \$outfile
+  rm \$procfile
 else
-   apply_english_pipeline
+  rm -f \$outtmp
+  mv \$procfile \$failfile
 fi
+exit \$result
+
+@% cd $TEMPDIR
+@% if
+@%   [ "$naflang" == "nl" ]
+@% then
+@%    apply_dutch_pipeline
+@% else
+@%    apply_english_pipeline
+@% fi
 @| @}
 
 @d make scripts executable @{@%
@@ -1538,10 +1596,10 @@ stopos pool
 
 @d move the processed naf around @{@%
 if
- [ $pipelineresult -eq 0 ]
+ [ \$pipelineresult -eq 0 ]
 then
   mkdir -p \$outpath
-  mv out.naf \$outfile
+  mv \$TEMPRES \$outfile
   rm \$procfile
 else
   movetotray \$procfile \$proctray \$failtray
@@ -1739,9 +1797,9 @@ m4_<!!>changecom()m4_dnl
 #!/bin/bash
 #PBS -lnodes=1
 <!#!>PBS -lwalltime=m4_<!!>walltime
+@< set local parameters in the job @>
 source m4_aprojroot/parameters
-piddir=`mktemp -d -t piddir.XXXXXXX`
-( $BIND/start_eSRL $piddir )&
+@< Start the bloody eSRL server @>
 export jobname=$PBS_JOBID
 @< log that the job starts @>
 @< set utf-8 @>

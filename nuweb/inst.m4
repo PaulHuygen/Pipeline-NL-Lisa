@@ -1,4 +1,4 @@
-m4_define(m4_repoversion, `0.0.00')m4_dnl
+m4_define(m4_repoversion, `0.0.01')m4_dnl
 m4_dnl
 m4_dnl Settings that are likely to vary
 m4_dnl
@@ -40,7 +40,6 @@ m4_define(m4_faildir, m4_adatadir/fail)m4_dnl
 m4_define(m4_procdir, m4_adatadir/proc)m4_dnl
 m4_define(m4_timeouterr, 124)m4_dnl
 m4_dnl
-m4_define(m4_piperoot, `/home/phuijgen/nlp/nlpp')m4_dnl
 m4_define(m4_memperprocess, `3')m4_dnl
 m4_define(m4_jobcountfile, m4_aprojroot/.jobcount)m4_dnl
 m4_define(m4_jobname, dutch_pipeline_job)m4_dnl
@@ -48,7 +47,7 @@ m4_define(m4_logfile, m4_logdir/log)m4_dnl
 m4_define(m4_runittimefile, m4_aprojroot/.runittime)m4_dnl
 m4_define(m4_runit_deadtime, 15)m4_dnl
 m4_define(m4_lisahost, lisa.surfsara.nl)m4_dnl
-m4_define(m4_spotlighthost, 130.37.53.38)m4_dnl
+m4_define(m4_spotlighthost, 130.37.53.33)m4_dnl
 m4_define(m4_spotlight_nl_port, 2060)m4_dnl
 m4_define(m4_spotlight_en_port, 2020)m4_dnl
 m4_define(m4_spotlight_directory, `/home/phuijgen/nlp/nlpp/env/spotlight')m4_dnl
