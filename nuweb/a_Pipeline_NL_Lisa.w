@@ -1486,7 +1486,7 @@ export TEMPRES=`mktemp -t tempout.XXXXXX`
 @< retrieve the language of the document @($procfile@) @>
 moduleresult=0
 @% timeout m4_timeoutsecs $root/apply_pipeline
-timeout m4_timeoutsecs bash -c "(cat \$procfile | $nlppscript > $TEMPRES)"
+timeout m4_timeoutsecs bash -c "(cat \$procfile | $nlppscript >$TEMPRES 2>$logfile)"
 pipelineresult=$?
 @< move the processed naf around @>
 cd $root
