@@ -852,27 +852,97 @@ Extract the summaries of
 the numbers of running jobs and the total number of jobs from the job
 management system of Lisa.
 
+The command \verb|showq -u $USER| produces a listing of active,
+waiting and blocked jobs. Figure~\ref{fig:joblisting}%
+\begin{figure}[hbtp]
+  \centering
+  \begin{alltt}
+active jobs------------------------
+JOBID              USERNAME      STATE PROCS   REMAINING            STARTTIME
+
+394084(5)          phuijgen    Running    80    00:29:40  Mon Mar  6 11:40:42
+
+5 active jobs           80 of 7552 processors in use by local jobs (1.06%)
+                        367 of 471 nodes active      (77.92%)
+
+eligible jobs----------------------
+JOBID              USERNAME      STATE PROCS     WCLIMIT            QUEUETIME
+
+
+0 eligible jobs   
+
+blocked jobs-----------------------
+JOBID              USERNAME      STATE PROCS     WCLIMIT            QUEUETIME
+
+
+0 blocked jobs   
+
+Total jobs:  5
+
+    
+  \end{alltt}
+  \caption{Example of job-listing summary produced by Lisa.}
+  \label{fig:joblisting}
+\end{figure}
+ is an example of such a list. So, we need to extract the number of
+ active jobs from the line that starts with ``nn active job''
+ (\verb|nn| being a number) the
+ number of waiting jobs from the line that starts with ``nn eligible
+ job'' and the total number of jobs from the line that starts with
+ ``Total jobs:''.
+
+
+
+@% @d count jobs @{@%
+@% joblist=`mktemp -t jobrep.XXXXXX`
+@% rm -rf $joblist
+@% showq -u $USER | tail -n 1 > $joblist
+@% running_jobs=`cat $joblist | gawk '
+@%     { match($0, /Active Jobs:[[:blank:]]*([[:digit:]]+)[[:blank:]]*Idle/, arr)
+@%       print arr[1]
+@%     }'`
+@% total_jobs_qn=`cat $joblist | gawk '
+@%     { match($0, /Total Jobs:[[:blank:]]*([[:digit:]]+)[[:blank:]]*Active/, arr)
+@%       print arr[1]
+@%     }'`
+@% rm $joblist
+@% @| running_jobs total_jobs_qn @}
+
 @d count jobs @{@%
 joblist=`mktemp -t jobrep.XXXXXX`
 rm -rf $joblist
-showq -u $USER | tail -n 1 > $joblist
+showq -u $USER > $joblist
 running_jobs=`cat $joblist | gawk '
-    { match($0, /Active Jobs:[[:blank:]]*([[:digit:]]+)[[:blank:]]*Idle/, arr)
+    { match($0, /^([[:digit:]]+)[[:blank:]]*active job/, arr)
+      print arr[1]
+    }'`
+waiting_jobs=`cat $joblist | gawk '
+    { match($0, /^([[:digit:]]+)[[:blank:]]*eligible job/, arr)
       print arr[1]
     }'`
 total_jobs_qn=`cat $joblist | gawk '
-    { match($0, /Total Jobs:[[:blank:]]*([[:digit:]]+)[[:blank:]]*Active/, arr)
+    { match($0, /Total jobs:[[:blank:]]*([[:digit:]]+)/, arr)
       print arr[1]
     }'`
 rm $joblist
 @| running_jobs total_jobs_qn @}
 
+Check whether this job-counting worked. Sometimes Surfsara changes the
+format of the report. In that case, set the variable to zero and print
+a line that mentions the error.
+
+@d count jobs @{@%
+if 
+  [ "$total_jobs_qn" == "" ]
+then
+  echo "Could not read total number of jobs from report"
+  total_jobs_qn=0
+fi
+@| @}
 
 If \verb|showq| reports more jobs than \verb|jobcount| lists, something is
 wrong. The best we can do in that case is to make \verb|jobcount|
-equal to \verb|running_jobs|. The same repair must be performed when
-\verb|jobcount| reports that there are jobs around while Sara
-maintains that this isn't the case.
+equal to \verb|running_jobs|.
 
 @d count jobs @{@%
 if
