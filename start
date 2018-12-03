@@ -5,6 +5,7 @@ then
   echo 'usage: start inputdir'
   exit 4
 fi
+module load stopos
 TESTDATADIR=$1
 ROOT=$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )
 DATADIR=$ROOT/data
@@ -19,7 +20,7 @@ mkdir -p $FAILTRAY
 mkdir -p $LOGTRAY
 m4 -P runit.m4 >runit
 chmod 775 ./runit
-m4 -P dutch-pipeline-job.m4 >dutch-pipeline-job
+m4 -P dutch_pipeline_job.m4 >dutch_pipeline_job
 chmod 775 ./dutch-pipeline-job
 m4 -P resetpool.m4 >resetpool
 chmod 775 ./resetpool

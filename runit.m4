@@ -37,7 +37,7 @@ BOOKKEEPFILE=$DATAROOT/timelog
 INTRAY=$DATAROOT/intray
 OUTTRAY=$DATAROOT/outtray
 FAILTRAY=$DATAROOT/failtray
-JOBSCRIPT=dutch-pipeline-job
+JOBSCRIPT=dutch_pipeline_job
 JOBSCRIPTTEMPLATE=$JOBSCRIPT.m4
 #
 # Count files and jobs
