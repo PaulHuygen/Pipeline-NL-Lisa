@@ -4,7 +4,7 @@ m4_changecom()#!/bin/bash
 export eSRL_piddir=`mktemp -d -t eSRL_piddir.XXXXXX`
 export semaworkdir=`mktemp -d -t sema.XXXXXX`
 
-source /home/phuijgen/nlpt/Pipeline-NL-Lisa/parameters
+source /home/phuijgen/nlp/Pipeline-NL-Lisa/parameters
 piddir=`mktemp -d -t piddir.XXXXXXX`
 ( export naflang="en" ; $BIND/start_eSRL $piddir ) &
 
@@ -21,13 +21,13 @@ module load stopos
 module load python/2.7.9
 
 function movetotray () {
-local file=$1
-local fromtray=$2
-local totray=$3
+local file="$1"
+local fromtray="$2"
+local totray="$3"
 local frompath=${file%/*}
 local topath=$totray${frompath##$fromtray}
 mkdir -p $topath
-mv $file $totray${file##$fromtray}
+mv "$file" "$totray${file##$fromtray}"
 }
 
 export -f movetotray
@@ -99,10 +99,10 @@ function getfile() {
     [ ! "$infile" == "" ]
   then
     filtrunk=${infile##$intray/}
-    export outfile=$outtray/${filtrunk}
-    export failfile=$failtray/${filtrunk}
-    export logfile=$logtray/${filtrunk}
-    export procfile=$proctray/${filtrunk}
+    export outfile=$outtray/"${filtrunk}"
+    export failfile=$failtray/"${filtrunk}"
+    export logfile=$logtray/"${filtrunk}"
+    export procfile=$proctray/"${filtrunk}"
     export outpath=${outfile%/*}
     export procpath=${procfile%/*}
     export logpath=${logfile%/*}
@@ -185,12 +185,12 @@ do
     
     while
        getfile
-       [ ! -z $infile ]
+       [ ! -z "$infile" ]
     do
        echo `date +%s`: Start $infile >> $timelogfile
        
        export nlppscript=$BIND/nlpp
-       movetotray $infile $intray $proctray
+       movetotray "$infile" "$intray" "$proctray"
        mkdir -p $outpath
        mkdir -p $logpath
        export TEMPRES=`mktemp -t tempout.XXXXXX`
@@ -207,16 +207,16 @@ do
        
        
        moduleresult=0
-       timeout 1500 bash -c "(cat $procfile | $nlppscript >$TEMPRES 2>$logfile)"
+       timeout 1500 bash -c "(cat \"$procfile\" | $nlppscript >$TEMPRES 2>\"$logfile\")"
        pipelineresult=$?
        if
         [ $pipelineresult -eq 0 ]
        then
          mkdir -p $outpath
-         mv $TEMPRES $outfile
-         rm $procfile
+         mv $TEMPRES "$outfile"
+         rm "$procfile"
        else
-         movetotray $procfile $proctray $failtray
+         movetotray "$procfile" "$proctray" "$failtray"
        fi  
        stopos -p $stopospool remove
        
