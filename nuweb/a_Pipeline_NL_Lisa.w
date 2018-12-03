@@ -229,13 +229,13 @@ The functions can be used as
 
 @d functions @{@%
 function movetotray () {
-local file=$1
-local fromtray=$2
-local totray=$3
+local file="$1"
+local fromtray="$2"
+local totray="$3"
 local frompath=${file%/*}
 local topath=$totray${frompath##$fromtray}
 mkdir -p $topath
-mv $file $totray${file##$fromtray}
+mv "$file" "$totray${file##$fromtray}"
 }
 
 export -f movetotray
@@ -340,10 +340,10 @@ files in the proctray, the outtray or the failtray and the logtray:
 
 @d generate filenames @{@%
 filtrunk=${infile##$intray/}
-export outfile=$outtray/${filtrunk}
-export failfile=$failtray/${filtrunk}
-export logfile=$logtray/${filtrunk}
-export procfile=$proctray/${filtrunk}
+export outfile=$outtray/"${filtrunk}"
+export failfile=$failtray/"${filtrunk}"
+export logfile=$logtray/"${filtrunk}"
+export procfile=$proctray/"${filtrunk}"
 export outpath=${outfile%/*}
 export procpath=${procfile%/*}
 export logpath=${logfile%/*}
@@ -1274,7 +1274,7 @@ processes it.
 @d perform the processing loop @{@%
 while
    getfile
-   [ ! -z $infile ]
+   [ ! -z "$infile" ]
 do
 @%        @< process 1 invokes runit @>
    @< add timelog entry @(Start $infile@) @>
@@ -1547,7 +1547,7 @@ process the file. Note the timeout instruction:
 
 @d process infile @{@%
 export nlppscript=\$BIND/nlpp
-movetotray $infile $intray $proctray
+movetotray "$infile" "$intray" "$proctray"
 mkdir -p $outpath
 mkdir -p $logpath
 @% export TEMPDIR=`mktemp -d -t nlpp.XXXXXX`
@@ -1556,7 +1556,7 @@ export TEMPRES=`mktemp -t tempout.XXXXXX`
 @< retrieve the language of the document @($procfile@) @>
 moduleresult=0
 @% timeout m4_timeoutsecs $root/apply_pipeline
-timeout m4_timeoutsecs bash -c "(cat \$procfile | $nlppscript >$TEMPRES 2>$logfile)"
+timeout m4_timeoutsecs bash -c "(cat \"\$procfile\" | $nlppscript >$TEMPRES 2>\"$logfile\")"
 pipelineresult=$?
 @< move the processed naf around @>
 cd $root
@@ -1669,10 +1669,10 @@ if
  [ \$pipelineresult -eq 0 ]
 then
   mkdir -p \$outpath
-  mv \$TEMPRES \$outfile
-  rm \$procfile
+  mv \$TEMPRES "\$outfile"
+  rm "\$procfile"
 else
-  movetotray \$procfile \$proctray \$failtray
+  movetotray "\$procfile" "\$proctray" "\$failtray"
 fi  
 @< remove the infile from the stopos pool @>
 @| @}
