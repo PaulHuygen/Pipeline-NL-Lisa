@@ -3,6 +3,7 @@ m4_dnl
 m4_dnl Settings that are likely to vary
 m4_dnl
 m4_define(m4_walltime, 30:00)m4_dnl   Max duration of a job
+m4_define(m4_walltime_minutes, `30')m4_dnl   Max duration of a job
 m4_define(m4_filesperjob, `100')m4_dnl
 m4_define(m4_maxjobs, `200')m4_dnl
 m4_define(m4_timeoutsecs, 1500)m4_dnl
@@ -10,6 +11,7 @@ m4_define(m4_maxprocminutes, `30')m4_dnl
 m4_define(m4_logging, true)m4_dnl
 m4_define(m4_maxjoblogminutes, `1440')m4_dnl
 m4_define(m4_pipelineroot, /home/phuijgen/nlp/nlpp)m4_dnl
+m4_define(m4_default_max_minutes_to_remove_lock, 60)m4_dnl
 m4_dnl m4_define(m4_pipelinescript, /home/phuijgen/usrlocal/bin/nlpp)m4_dnl
 m4_dnl
 m4_dnl Titles
@@ -20,6 +22,7 @@ m4_define(m4_doctitle, `NLP-annotate documents on Surfsara's Lisa computer')m4_d
 m4_define(m4_docdate, `\today \\ m4_time_of_day~h.')m4_dnl
 m4_define(m4_author, `Paul Huygen <paul.huygen@@huygen.nl>')m4_dnl
 m4_define(m4_subject, `Standardised Dutch pipeline')m4_dnl
+m4_define(m4_jobname, `magicplace_2')m4_dnl
 m4_dnl
 m4_dnl Paths and URL's
 m4_dnl
@@ -42,7 +45,7 @@ m4_define(m4_timeouterr, 124)m4_dnl
 m4_dnl
 m4_define(m4_memperprocess, `3')m4_dnl
 m4_define(m4_jobcountfile, m4_aprojroot/.jobcount)m4_dnl
-m4_define(m4_jobname, dutch_pipeline_job)m4_dnl
+m4_define(m4_jobfilename, m4_jobname)m4_dnl
 m4_define(m4_logfile, m4_logdir/log)m4_dnl
 m4_define(m4_runittimefile, m4_aprojroot/.runittime)m4_dnl
 m4_define(m4_runit_deadtime, 15)m4_dnl
@@ -54,7 +57,7 @@ m4_define(m4_spotlight_directory, `/home/phuijgen/nlp/nlpp/env/spotlight')m4_dnl
 m4_dnl
 m4_dnl Stopos
 m4_dnl
-m4_define(m4_stopospool, dppool)m4_dnl
+m4_define(m4_stopospool, magicpool2)m4_dnl
 m4_define(m4_min_stoposfiles, 500)m4_dnl
 m4_define(m4_max_infile_number, 25000)m4_dnl
 m4_define(m4_sufficient_stopos_entries, 30000)m4_dnl

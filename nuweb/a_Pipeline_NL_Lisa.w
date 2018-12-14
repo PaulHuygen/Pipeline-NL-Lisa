@@ -451,17 +451,17 @@ number to m4_sufficient_stopos_entries.
 
 
 First let us see whether we will update the existing pool or purge and
-renew it. We renew it:
+renew it. We renew the pool under the following:
 \begin{enumerate}
 \item When there are no files in the intray, so the pool ought to be empty;
 \item When there are no jobs around, so renewing the pool does not
   interfere with jobs running:
-\item When the pool status tells us that the pool is empty.
+\item When the pool status tells us that the pool is empty or it does not exist at all..
 \end{enumerate}
 
 
-The following macro sets the first argument variable (\verb|pool-full|) to ``1'' if the
-pool does not exist or if it contains less then
+The following macro sets the first argument variable
+(\verb|pool-full|) to ``1'' if the pool does not exist or if it contains less than
 m4_sufficient_stopos_entries filenames. Otherwise, it sets the
 variable to ``0'' (true). It sets the second argument variable similar
 when there no filenames left in the pool.
@@ -497,24 +497,23 @@ find \$intray -type f -print | sort >infilelist
 @| infilelist @}
 
 
-
 Note that variable \verb|jobcount| needs to be known before running
-the following macro. The macro set variable
+the following macro. The macro sets variable
 \verb|regen_pool_condition| to \verb|true| (i.e. zero) when the
-conditions renew the pool are fulfilled.
+conditions to renew the pool are fulfilled.
 
 @d decide whether to renew the stopos-pool @{@%
 cd $root
 regen_pool_condition=1
 if
-  [ \$incount -eq 0 ] || [ \$jobcount -eq 0 ] || [ \$pool_empty -eq 0 ]
+  [ \$incount -eq 0 ] || [ \$lisa_jobcount -eq 0 ] || [ \$pool_empty -eq 0 ]
 then
   regen_pool_condition=0
 fi
 @| regen_pool_condition @}
 
 When the conditions are fulfilled, make a new pool and empty
-\verb|old.infileist|. Otherwise, remove from \verb|old.infilelist| the
+\verb|old.infilelist|. Otherwise, remove from \verb|old.infilelist| the
 names of files that are no longer present in the intray.
 
 @d clean up pool and old.filenames @{@%
@@ -534,7 +533,7 @@ fi
 Update the content of \verb|old.infilelist| so that, as far as we know, it contains only
 names of files that are still in the pool. Update \verb|infilelist|
 so that it only contains names of files that reside in the intray but
-not yet in the pool.
+not yet in the pool. 
 
 @d clean up old.infilelist @{@%
 comm -12 old.infilelist infilelist >temp.infilelist
@@ -808,9 +807,9 @@ following:
 \end{enumerate}
 
 Find out how many submitted jobs there are and how many of them are
-actually running. Lisa supplies an instruction \verb|showq| that
-produces a list of running and waiting jobs. However, the list is not
-always complete. Therefore we need to make job bookkeeping.
+actually running. Lisa supplies an instruction \verb|squeue| that
+produces a list of running and waiting jobs. However, it has happened that the list was not
+complete. Therefore we need to make job bookkeeping.
 
 File \verb|jobcounter| lists the number of jobs. When extra jobs are
 submitted, the number is increased. When logfiles are found that jobs
@@ -820,9 +819,9 @@ produce when they end, the number is decreased.
 if
   [ -e jobcounter ]
 then
-  export jobcount=`cat jobcounter`
+  export my_jobcount=`cat jobcounter`
 else
-  jobcount=0
+  my_jobcount=0
 fi
 @| @}
 
@@ -834,63 +833,116 @@ list of the logfiles that we will process.
 
 @d count jobs @{@%
 cd $root
-ls -1 m4_jobname<!!>.[eo]* >jobloglist
-finished_jobs=`cat jobloglist | grep "\.e" | wc -l`
-@% finished_jobs=`ls -1 $root/m4_jobname<!!>.e* | wc -l`
+finished_jobs=`ls -1 slurm-*.out | wc -l`
+@% finished_jobs=`cat jobloglist | grep "\.e" | wc -l`
 mkdir -p joblogs
-cat jobloglist | xargs -iaap mv aap joblogs/
+mv slurm-*.out joblogs/
+@% cat jobloglist | xargs -iaap mv aap joblogs/
 if
-  [ $finished_jobs -gt $jobcount ]
+  [ $finished_jobs -gt $my_jobcount ]
 then
-  jobcount=0
+  my_jobcount=0
 else
-  jobcount=$((jobcount - $finished_jobs))
+  my_jobcount=$((my_jobcount - $finished_jobs))
 fi
-@| @}
+@| my_jobcount @}
 
 Extract the summaries of
 the numbers of running jobs and the total number of jobs from the job
 management system of Lisa.
 
-The command \verb|showq -u $USER| produces a listing of active,
-waiting and blocked jobs. Figure~\ref{fig:joblisting}%
-\begin{figure}[hbtp]
-  \centering
-  \begin{alltt}
-active jobs------------------------
-JOBID              USERNAME      STATE PROCS   REMAINING            STARTTIME
+The command \verb|squeue| produces a list of jobs. Example of it's output:
 
-394084(5)          phuijgen    Running    80    00:29:40  Mon Mar  6 11:40:42
+\begin{alltt}
 
-5 active jobs           80 of 7552 processors in use by local jobs (1.06%)
-                        367 of 471 nodes active      (77.92%)
+phuijgen@@login2:~/nlp/test$ squeue | head       
+             JOBID PARTITION     NAME     USER ST       TIME  NODES NODELIST(REASON)
+          42307_21     short PLINK_CH jakalman CG       0:04      1 r26n4
+          42307_15     short PLINK_CH jakalman CG       0:04      1 r25n11
+          42307_18     short PLINK_CH jakalman CG       0:05      1 r27n2
+          42307_12     short PLINK_CH jakalman CG       0:04      1 r26n29
 
-eligible jobs----------------------
-JOBID              USERNAME      STATE PROCS     WCLIMIT            QUEUETIME
+\end{alltt}
+
+It seems that \verb|squeue| produces a table with the following columns:
+
+\begin{description}
+\item[Jobid:] Job ID
+\item[Partition:] Class of jobs in which the job has been classified.
+\item[Name:] Name of the job
+\item[User:] 
+\item[St:] Job status. when the job runs, the status seems to be \verb|R|.
+\item[Time:] Probably elapsed time since the job started to run.
+\item[Nodes:] 
+\item[Nodelist (reason):] Don't know.
+
+\end{description}
 
 
-0 eligible jobs   
+@% The command \verb|showq -u $USER| produces a listing of active,
+@% waiting and blocked jobs. Figure~\ref{fig:joblisting}%
+@% \begin{figure}[hbtp]
+@%   \centering
+@%   \begin{alltt}
+@% active jobs------------------------
+@% JOBID              USERNAME      STATE PROCS   REMAINING            STARTTIME
+@% 
+@% 394084(5)          phuijgen    Running    80    00:29:40  Mon Mar  6 11:40:42
+@% 
+@% 5 active jobs           80 of 7552 processors in use by local jobs (1.06%)
+@%                         367 of 471 nodes active      (77.92%)
+@% 
+@% eligible jobs----------------------
+@% JOBID              USERNAME      STATE PROCS     WCLIMIT            QUEUETIME
+@% 
+@% 
+@% 0 eligible jobs   
+@% 
+@% blocked jobs-----------------------
+@% JOBID              USERNAME      STATE PROCS     WCLIMIT            QUEUETIME
+@% 
+@% 
+@% 0 blocked jobs   
+@% 
+@% Total jobs:  5
+@% 
+@%     
+@%   \end{alltt}
+@%   \caption{Example of job-listing summary produced by Lisa.}
+@%   \label{fig:joblisting}
+@% \end{figure}
+@%  is an example of such a list. So, we need to extract the number of
+@%  active jobs from the line that starts with ``nn active job''
+@%  (\verb|nn| being a number) the
+@%  number of waiting jobs from the line that starts with ``nn eligible
+@%  job'' and the total number of jobs from the line that starts with
+@%  ``Total jobs:''.
+@% 
 
-blocked jobs-----------------------
-JOBID              USERNAME      STATE PROCS     WCLIMIT            QUEUETIME
 
 
-0 blocked jobs   
+\begin{alltt}
+  phuijgen@@login2:~/nlp/test/test$ sbatch -J 'apekop' testjob
+  JOBID     PARTITION  NAME     USER ST       TIME  NODES NODELIST(REASON)
+  87294_63  short      PLINK_CH jakalman CG   0:02      1 r26n17
+  87452     short      apekop   phuijgen PD   0:00      1 (Resources)
 
-Total jobs:  5
+\end{alltt}
 
-    
-  \end{alltt}
-  \caption{Example of job-listing summary produced by Lisa.}
-  \label{fig:joblisting}
-\end{figure}
- is an example of such a list. So, we need to extract the number of
- active jobs from the line that starts with ``nn active job''
- (\verb|nn| being a number) the
- number of waiting jobs from the line that starts with ``nn eligible
- job'' and the total number of jobs from the line that starts with
- ``Total jobs:''.
+This package will give submitted jobs the name \verb|m4_jobname|. The
+following code-piece extracts the lines about jobs with this name from
+a job-report and counts the number of jobs and of the number of
+running jobs.
 
+
+@d count jobs @{@%
+joblist=`mktemp -t jobrep.XXXXXX`
+rm -rf $joblist
+squeue | gawk '\$3=="m4_jobname" {print}' > $joblist
+lisa_jobcount=`wc -l <$joblist`
+running_jobs=`gawk '$5=="R" {runners++}; END {print runners}' $joblist`
+rm -rf \$joblist
+@| joblist lisa_jobcount running_jobs @}
 
 
 @% @d count jobs @{@%
@@ -908,63 +960,45 @@ Total jobs:  5
 @% rm $joblist
 @% @| running_jobs total_jobs_qn @}
 
-@d count jobs @{@%
-joblist=`mktemp -t jobrep.XXXXXX`
-rm -rf $joblist
-showq -u $USER > $joblist
-running_jobs=`cat $joblist | gawk '
-    { match($0, /^([[:digit:]]+)[[:blank:]]*active job/, arr)
-      print arr[1]
-    }'`
-waiting_jobs=`cat $joblist | gawk '
-    { match($0, /^([[:digit:]]+)[[:blank:]]*eligible job/, arr)
-      print arr[1]
-    }'`
-total_jobs_qn=`cat $joblist | gawk '
-    { match($0, /Total jobs:[[:blank:]]*([[:digit:]]+)/, arr)
-      print arr[1]
-    }'`
-rm $joblist
-@| running_jobs total_jobs_qn @}
 
-Check whether this job-counting worked. Sometimes Surfsara changes the
-format of the report. In that case, set the variable to zero and print
-a line that mentions the error.
-
-@d count jobs @{@%
-if 
-  [ "$total_jobs_qn" == "" ]
-then
-  echo "Could not read total number of jobs from report"
-  total_jobs_qn=0
-fi
-@| @}
-
-If \verb|showq| reports more jobs than \verb|jobcount| lists, something is
-wrong. The best we can do in that case is to make \verb|jobcount|
-equal to \verb|running_jobs|.
-
-@d count jobs @{@%
-if
-  [ $total_jobs_qn -gt $jobcount ] || [ $total_jobs_qn -eq 0 ]
-then
-  jobcount=$total_jobs_qn
-fi
-@| @}
-
+@% Check whether this job-counting worked. Sometimes Surfsara changes the
+@% format of the report. In that case, set the variable to zero and print
+@% a line that mentions the error.
+@% 
+@% @d count jobs @{@%
+@% if 
+@%   [ "$total_jobs_qn" == "" ]
+@% then
+@%   echo "Could not read total number of jobs from report"
+@%   total_jobs_qn=0
+@% fi
+@% @| @}
+@% 
+@% If \verb|showq| reports more jobs than \verb|jobcount| lists, something is
+@% wrong. The best we can do in that case is to make \verb|jobcount|
+@% equal to \verb|running_jobs|.
+@% 
+@% @d count jobs @{@%
+@% if
+@%   [ $total_jobs_qn -gt $jobcount ] || [ $total_jobs_qn -eq 0 ]
+@% then
+@%   jobcount=$total_jobs_qn
+@% fi
+@% @| @}
 
 
 Currently we aim at one job per m4_filesperjob waiting files.
 @d parameters @{@%
 filesperjob=m4_filesperjob
-@| @}
+@| filesperjob @}
 
 Calculate the number of jobs that have to be submitted.
 
 @d determine how many jobs have to be submitted @{@%
 @< determine number of jobs that we want to have @>
-jobs_to_be_submitted=$((jobs_needed - $jobcount))
-@| @}
+@% jobs_to_be_submitted=$((jobs_needed - $jobcount))
+jobs_to_be_submitted=$((jobs_needed - $lisa_jobcount))
+@| jobs_to_be_submitted @}
 
 Variable \verb|jobs_needed| will contain the number of jobs that we
 want to have submitted, given the number of unready NAF files.
@@ -976,7 +1010,7 @@ if
 then
   jobs_needed=1
 fi
-@| @}
+@| jobs_needed @}
 
 Let us not flood the place with millions of jobs. Set a max of
 m4_maxjobs submitted jobs.
@@ -996,9 +1030,9 @@ if
   [ \$jobs_to_be_submitted -gt 0 ]
 then
    @< submit jobs @(\$jobs_to_be_submitted@) @>
-   jobcount=$((jobcount + $jobs_to_be_submitted))
+   my_jobcount=$((my_jobcount + $jobs_to_be_submitted))
 fi 
-echo $jobcount > jobcounter
+echo $my_jobcount > jobcounter
 @| jobs_needed jobs_to_be_submitted@}
 
 
@@ -1009,40 +1043,37 @@ echo $jobcount > jobcounter
 
 A job needs a script that tells what to do. The job-script is a Bash
 script with the recipe to be executed, supplemented with instructions
-for the job control system of the host. In order to perform the Art of
-Making Things Unccesessary Complicated, we have a template from which
-the job-script can be generated with the
-\href{http://www.gnu.org/software/m4/m4.html}{M4 pre-processor}.
+for the job control system of the host.
 
-Generate job-script template \verb|job.m4| as follows:
-\begin{enumerate}
-\item Open the job-script with the wall-time parameter (the maximum duration that is allowed
-for the job).
-\item Add an instruction to change the M4 ``quote'' characters.
-\item Add the M4 template \verb|m4_jobname|.
-\end{enumerate}
-
-Process the template with \texttt{M4}.
-
-
-@d generate jobscript @{@%
-echo "m4_<!!>define(m4_<!!>walltime, $walltime)m4_<!!>dnl" >job.m4
-m4_changequote(<![!>,<!]!>)m4_dnl
-echo 'm4_[]changequote(`<!'"'"',`!>'"'"')m4_[]dnl' >>job.m4
-m4_changequote([<!],[!>])m4_dnl
-cat m4_jobname<!!>.m4 >>job.m4
-cat job.m4 | m4 -P >m4_jobname
-# rm job.m4
-@| @}
-
-
-A wall-time of 30 minutes seems suitable for the jobs. It is
-sufficiently large to be productive and it is small enough to be
-scheduled flexible in the job-system of Lisa.
-
-@d parameters @{@%
-export walltime=m4_walltime
-@| walltime @}
+@% Generate job-script template \verb|job.m4| as follows:
+@% \begin{enumerate}
+@% \item Open the job-script with the wall-time parameter (the maximum duration that is allowed
+@% for the job).
+@% \item Add an instruction to change the M4 ``quote'' characters.
+@% \item Add the M4 template \verb|m4_jobname|.
+@% \end{enumerate}
+@% 
+@% Process the template with \texttt{M4}.
+@% 
+@% 
+@% @d generate jobscript @{@%
+@% echo "m4_<!!>define(m4_<!!>walltime, $walltime)m4_<!!>dnl" >job.m4
+@% m4_changequote(<![!>,<!]!>)m4_dnl
+@% echo 'm4_[]changequote(`<!'"'"',`!>'"'"')m4_[]dnl' >>job.m4
+@% m4_changequote([<!],[!>])m4_dnl
+@% cat m4_jobfilename<!!>.m4 >>job.m4
+@% cat job.m4 | m4 -P >m4_jobfilename
+@% # rm job.m4
+@% @| @}
+@% 
+@% 
+@% A wall-time of 30 minutes seems suitable for the jobs. It is
+@% sufficiently large to be productive and it is small enough to be
+@% scheduled flexible in the job-system of Lisa.
+@% 
+@% @d parameters @{@%
+@% export walltime=m4_walltime
+@% @| walltime @}
 
 
 
@@ -1050,8 +1081,15 @@ Submit the jobscript. The argument is the number of times that the
 jobscript has to be submitted.
 
 @d submit jobs @{@%
- @< generate jobscript @>
- jobid=`qsub -t 1-@1 m4_aprojroot/m4_jobname`
+@% @< generate jobscript @>
+@%  jobid=`qsub -t 1-@1 m4_aprojroot/m4_jobname`
+if
+  [ @1 -gt 1 ]
+then 
+  sbatch -J m4_jobname -a 1-@1 m4_jobfilename
+else
+  sbatch -J m4_jobname m4_jobfilename
+fi
 @| @}
 
 \section{Logging}
@@ -1208,7 +1246,7 @@ be executed succesfully.
 
 @d determine amount of memory and nodes @{@%
 export ncores=`sara-get-num-cores`
-#export MEMORY=`head -n 1 < /proc/meminfo | gawk '{print $2}'`
+@% export MEMORY=`head -n 1 < /proc/meminfo | gawk '{print $2}'`
 export memory=`sara-get-mem-size`
 @| memory ncores @}
 
@@ -1384,119 +1422,120 @@ exec 6>&-
 This section finally deals with the essential purpose of this
 software: to annotate a document with the modules of the pipeline.
 
-The pipeline is installed in directory \verb|m4_pipelineroot|. For
-each of the modules there is a script in subdirectory \verb|bin|.
+The pipeline is installed in directory \verb|m4_pipelineroot|. Script
+~bin/nlpp~ applies the pipeline on a \textsc{naf} file that it reads
+from standard in.
 
 @d parameters @{@%
 export pipelineroot=m4_pipelineroot
 export BIND=$pipelineroot/bin
-@| @}
+@| pipelineroot BIND @}
 
 
 
-\subsection{Language of the document}
-\label{sec:language}
-
-Our pipeline is currently bi-lingual. Only documents in Dutch or
-English can be annotated. The language is specified as argument in the
-\verb|NAF| tag. The pipeline installation contains a Python script that
-returns the language of the document in the \NAF{}. Put the language
-in variable \verb|naflang|.
-
-Select the model that the Nerc module has to use, dependent of the language.
-
-@d retrieve the language of the document  @{@%
-naflang=`cat @1 | python m4_pipelineroot/env/bin/langdetect.py`
-export naflang
-#
-@< set nercmodel @>
-@| naflang @}
-
-By the way, the python script uses Python 2.7, so let us import the
-corresponding module.
-
-@d load python module @{@%
-module load python/2.7.9
-@| @}
-
-@d set nercmodel @{@%
-if
-  [ "$naflang" == "nl" ]
-then
-  export nercmodel=nl/nl-clusters-conll02.bin
-else
-  export nercmodel=en/en-newsreader-clusters-3-class-muc7-conll03-ontonotes-4.0.bin
-fi
-@| nercmodel @}
-
-
-
-\subsection{Apply a module on a NAF file}
-\label{sec:apply_module}
-
-For each NLP module, there is a script in the \verb|bin| subdirectory
-of the pipeline-installation. This script reads a \NAF{} file from
-standard in and produces annotated \NAF{}-encoded document on standard
-out, if all goes well. The exit-code of the module-script can be used
-as indication of the success of the annotation.
-
-To prevent that modules operate on the result of failed operation of a 
-a previous module, the exit code will be stored in
-variable \verb|moduleresult|. 
-
-The following function applies a module on the input naf file, but
-only if variable \verb|moduleresult| is equal to zero. If the
-annotation fails, the function writes a fail message to standard error
-and it sets variable \verb|failmodule| to the name of the module that
-failed. In this way the modules can easily be concatenated to annotate
-the input document and to stop processing with a clear message when a
-module goes wrong. The module's output of standard error is concatenated to the
-logfile that belongs to the input-file. The function has the following arguments:
-
-\begin{enumerate}
-\item Path of the input \NAF{}.
-\item Module script.
-\item Path of the output \NAF{}.
-\end{enumerate}
+@% \subsection{Language of the document}
+@% \label{sec:language}
+@% 
+@% Our pipeline is currently bi-lingual. Only documents in Dutch or
+@% English can be annotated. The language is specified as argument in the
+@% \verb|NAF| tag. The pipeline installation contains a Python script that
+@% returns the language of the document in the \NAF{}. Put the language
+@% in variable \verb|naflang|.
+@% 
+@% Select the model that the Nerc module has to use, dependent of the language.
+@% 
+@% @d retrieve the language of the document  @{@%
+@% naflang=`cat @1 | python m4_pipelineroot/env/bin/langdetect.py`
+@% export naflang
+@% #
+@% @< set nercmodel @>
+@% @| naflang @}
+@% 
+@% By the way, the python script uses Python 2.7, so let us import the
+@% corresponding module.
+@% 
+@% @d load python module @{@%
+@% module load python/2.7.9
+@% @| @}
+@% 
+@% @d set nercmodel @{@%
+@% if
+@%   [ "$naflang" == "nl" ]
+@% then
+@%   export nercmodel=nl/nl-clusters-conll02.bin
+@% else
+@%   export nercmodel=en/en-newsreader-clusters-3-class-muc7-conll03-ontonotes-4.0.bin
+@% fi
+@% @| nercmodel @}
 
 
-@d functions in the pipeline-file @{@%
-function runmodule {
-infile=\$1
-modulecommand=\$2
-outfile=\$3
-@% logfile=\$4
-if
-  [ $moduleresult -eq 0 ]
-then
-  cat $infile | $modulecommand > $outfile 2>>$logfile
-  moduleresult=$?
-  if
-    [ $moduleresult -gt 0 ]
-  then
-    failmodule=$modulecommand
-@%     echo Failed: process $procnum";" file $infilefullname";" module $modulecommand";" result $moduleresult >&2
-     echo Failed: module $modulecommand";" result $moduleresult >>$logfile
-     echo Failed: module $modulecommand";" result $moduleresult >&2
-     echo Failed: module $modulecommand";" result $moduleresult
-     cp $outfile out.naf
-     exit $moduleresult
-  else
-     echo Completed: module $modulecommand";" result $moduleresult >>$logfile
-     echo Completed: module $modulecommand";" result $moduleresult >&2
-     echo Completed: module $modulecommand";" result $moduleresult
-  fi
-fi  
-}
 
-export runmodule
-@| @}
-
-Initialise \verb|moduleresult| with value 0:
-
-@d functions in the pipeline-file @{@%
-export moduleresult=0
-@|moduleresult @}
+@% \subsection{Apply a module on a NAF file}
+@% \label{sec:apply_module}
+@% 
+@% For each NLP module, there is a script in the \verb|bin| subdirectory
+@% of the pipeline-installation. This script reads a \NAF{} file from
+@% standard in and produces annotated \NAF{}-encoded document on standard
+@% out, if all goes well. The exit-code of the module-script can be used
+@% as indication of the success of the annotation.
+@% 
+@% To prevent that modules operate on the result of failed operation of a 
+@% a previous module, the exit code will be stored in
+@% variable \verb|moduleresult|. 
+@% 
+@% The following function applies a module on the input naf file, but
+@% only if variable \verb|moduleresult| is equal to zero. If the
+@% annotation fails, the function writes a fail message to standard error
+@% and it sets variable \verb|failmodule| to the name of the module that
+@% failed. In this way the modules can easily be concatenated to annotate
+@% the input document and to stop processing with a clear message when a
+@% module goes wrong. The module's output of standard error is concatenated to the
+@% logfile that belongs to the input-file. The function has the following arguments:
+@% 
+@% \begin{enumerate}
+@% \item Path of the input \NAF{}.
+@% \item Module script.
+@% \item Path of the output \NAF{}.
+@% \end{enumerate}
+@% 
+@% 
+@% @d functions in the pipeline-file @{@%
+@% function runmodule {
+@% infile=\$1
+@% modulecommand=\$2
+@% outfile=\$3
+@% @% logfile=\$4
+@% if
+@%   [ $moduleresult -eq 0 ]
+@% then
+@%   cat $infile | $modulecommand > $outfile 2>>$logfile
+@%   moduleresult=$?
+@%   if
+@%     [ $moduleresult -gt 0 ]
+@%   then
+@%     failmodule=$modulecommand
+@% @%     echo Failed: process $procnum";" file $infilefullname";" module $modulecommand";" result $moduleresult >&2
+@%      echo Failed: module $modulecommand";" result $moduleresult >>$logfile
+@%      echo Failed: module $modulecommand";" result $moduleresult >&2
+@%      echo Failed: module $modulecommand";" result $moduleresult
+@%      cp $outfile out.naf
+@%      exit $moduleresult
+@%   else
+@%      echo Completed: module $modulecommand";" result $moduleresult >>$logfile
+@%      echo Completed: module $modulecommand";" result $moduleresult >&2
+@%      echo Completed: module $modulecommand";" result $moduleresult
+@%   fi
+@% fi  
+@% }
+@% 
+@% export runmodule
+@% @| @}
+@% 
+@% Initialise \verb|moduleresult| with value 0:
+@% 
+@% @d functions in the pipeline-file @{@%
+@% export moduleresult=0
+@% @|moduleresult @}
 
 \subsection{The eSRL server}
 \label{sec:eSRL-server}
@@ -1553,7 +1592,7 @@ mkdir -p $logpath
 @% export TEMPDIR=`mktemp -d -t nlpp.XXXXXX`
 @% cd $TEMPDIR
 export TEMPRES=`mktemp -t tempout.XXXXXX`
-@< retrieve the language of the document @($procfile@) @>
+@% @< retrieve the language of the document @($procfile@) @>
 moduleresult=0
 @% timeout m4_timeoutsecs $root/apply_pipeline
 timeout m4_timeoutsecs bash -c "(cat \"\$procfile\" | $nlppscript >$TEMPRES 2>\"$logfile\")"
@@ -1563,34 +1602,34 @@ cd $root
 rm -f $TEMPRES
 @| pipelineresult timeout @}
 
-We need to set a time-out on processing, otherwise documents that take
-too much time keep being recycled between the intray and the
-proctray. The bash timeout function executes the instruction that is
-given as argument in a subshell. Therefore, execute processing in a
-separate script, \verb|apply_pipeline|. This script inherits the
-exported parameters from the
-environment from which the timeout instruction has been executed. In
-other words, it knows about \verb|infile|, \verb|procfile| etc.
-
-The script applies the \verb|nlpp| script on the input-file. 
-
-@o m4_projroot/apply_pipeline @{@%
-#!/bin/bash
-export pipelinescript=m4_pipelineroot/bin/nlpp
-outtmp=`mktemp -t outtmp.XXXXXX`
-@% @< functions in the pipeline-file @>
-cat \$procfile | \$pipelinescript > \$outtmp
-result=\$?
-if
-  [ \$result -eq 0 ]
-then
-  mv \$outtmp \$outfile
-  rm \$procfile
-else
-  rm -f \$outtmp
-  mv \$procfile \$failfile
-fi
-exit \$result
+@% We need to set a time-out on processing, otherwise documents that take
+@% too much time keep being recycled between the intray and the
+@% proctray. The bash timeout function executes the instruction that is
+@% given as argument in a subshell. Therefore, execute processing in a
+@% separate script, \verb|apply_pipeline|. This script inherits the
+@% exported parameters from the
+@% environment from which the timeout instruction has been executed. In
+@% other words, it knows about \verb|infile|, \verb|procfile| etc.
+@% 
+@% The script applies the \verb|nlpp| script on the input-file. 
+@% 
+@% @o m4_projroot/apply_pipeline @{@%
+@% #!/bin/bash
+@% export pipelinescript=m4_pipelineroot/bin/nlpp
+@% outtmp=`mktemp -t outtmp.XXXXXX`
+@% @% @< functions in the pipeline-file @>
+@% cat \$procfile | \$pipelinescript > \$outtmp
+@% result=\$?
+@% if
+@%   [ \$result -eq 0 ]
+@% then
+@%   mv \$outtmp \$outfile
+@%   rm \$procfile
+@% else
+@%   rm -f \$outtmp
+@%   mv \$procfile \$failfile
+@% fi
+@% exit \$result
 
 @% cd $TEMPDIR
 @% if
@@ -1600,62 +1639,62 @@ exit \$result
 @% else
 @%    apply_english_pipeline
 @% fi
-@| @}
-
-@d make scripts executable @{@%
-chmod 775 m4_aprojroot/apply_pipeline
-@| @}
-
-
-@% @d apply the modules for Dutch @{@%
-@d functions in the pipeline-file @{@%
-function apply_dutch_pipeline {
-  runmodule $procfile   $BIND/tok                 tok.naf
-  runmodule tok.naf     $BIND/mor                 mor.naf
-  runmodule mor.naf     $BIND/nerc                nerc.naf
-  runmodule nerc.naf    $BIND/wsd                 wsd.naf
-  runmodule wsd.naf     $BIND/ned                 ned.naf
-  runmodule ned.naf     $BIND/heideltime          times.naf
-  runmodule times.naf   $BIND/onto                onto.naf
-  runmodule onto.naf    $BIND/srl                 srl.naf
-  runmodule srl.naf     $BIND/nomevent            nomev.naf
-  runmodule nomev.naf   $BIND/srl-dutch-nominals  psrl.naf
-  runmodule psrl.naf    $BIND/framesrl            fsrl.naf
-  runmodule fsrl.naf    $BIND/opinimin            opin.naf
-  runmodule opin.naf    $BIND/evcoref             out.naf
-}
-
-export apply_dutch_pipeline
-
-@| @}
+@% @| @}
+@% 
+@% @d make scripts executable @{@%
+@% chmod 775 m4_aprojroot/apply_pipeline
+@% @| @}
 
 
-@% @d apply the modules for English @{@%
-@d functions in the pipeline-file @{@%
-function apply_english_pipeline {
-  runmodule $procfile    $BIND/tok               tok.naf
-  runmodule tok.naf      $BIND/topic             top.naf
-  runmodule top.naf      $BIND/pos               pos.naf
-  runmodule pos.naf      $BIND/constpars         consp.naf
-  runmodule consp.naf    $BIND/nerc              nerc.naf
-  runmodule nerc.naf     $BIND/coreference-base  coref.naf
-  runmodule coref.naf    $BIND/ned               ned.naf
-  runmodule ned.naf      $BIND/nedrer            nedr.naf
-  runmodule nedr.naf     $BIND/wikify            wikif.naf
-  runmodule wikif.naf    $BIND/ukb               ukb.naf
-  runmodule ukb.naf      $BIND/ewsd              ewsd.naf
-  runmodule ewsd.naf     $BIND/eSRL              esrl.naf
-  runmodule esrl.naf     $BIND/FBK-time          time.naf
-  runmodule time.naf     $BIND/FBK-temprel       trel.naf
-  runmodule trel.naf     $BIND/FBK-causalrel     crel.naf
-  runmodule crel.naf     $BIND/evcoref           ecrf.naf
-  runmodule ecrf.naf     $BIND/factuality        fact.naf
-  runmodule fact.naf     $BIND/opinimin          out.naf
-}
+@% @% @d apply the modules for Dutch @{@%
+@% @d functions in the pipeline-file @{@%
+@% function apply_dutch_pipeline {
+@%   runmodule $procfile   $BIND/tok                 tok.naf
+@%   runmodule tok.naf     $BIND/mor                 mor.naf
+@%   runmodule mor.naf     $BIND/nerc                nerc.naf
+@%   runmodule nerc.naf    $BIND/wsd                 wsd.naf
+@%   runmodule wsd.naf     $BIND/ned                 ned.naf
+@%   runmodule ned.naf     $BIND/heideltime          times.naf
+@%   runmodule times.naf   $BIND/onto                onto.naf
+@%   runmodule onto.naf    $BIND/srl                 srl.naf
+@%   runmodule srl.naf     $BIND/nomevent            nomev.naf
+@%   runmodule nomev.naf   $BIND/srl-dutch-nominals  psrl.naf
+@%   runmodule psrl.naf    $BIND/framesrl            fsrl.naf
+@%   runmodule fsrl.naf    $BIND/opinimin            opin.naf
+@%   runmodule opin.naf    $BIND/evcoref             out.naf
+@% }
+@% 
+@% export apply_dutch_pipeline
+@% 
+@% @| @}
 
-export apply_english_pipeline
 
-@| @}
+@% @% @d apply the modules for English @{@%
+@% @d functions in the pipeline-file @{@%
+@% function apply_english_pipeline {
+@%   runmodule $procfile    $BIND/tok               tok.naf
+@%   runmodule tok.naf      $BIND/topic             top.naf
+@%   runmodule top.naf      $BIND/pos               pos.naf
+@%   runmodule pos.naf      $BIND/constpars         consp.naf
+@%   runmodule consp.naf    $BIND/nerc              nerc.naf
+@%   runmodule nerc.naf     $BIND/coreference-base  coref.naf
+@%   runmodule coref.naf    $BIND/ned               ned.naf
+@%   runmodule ned.naf      $BIND/nedrer            nedr.naf
+@%   runmodule nedr.naf     $BIND/wikify            wikif.naf
+@%   runmodule wikif.naf    $BIND/ukb               ukb.naf
+@%   runmodule ukb.naf      $BIND/ewsd              ewsd.naf
+@%   runmodule ewsd.naf     $BIND/eSRL              esrl.naf
+@%   runmodule esrl.naf     $BIND/FBK-time          time.naf
+@%   runmodule time.naf     $BIND/FBK-temprel       trel.naf
+@%   runmodule trel.naf     $BIND/FBK-causalrel     crel.naf
+@%   runmodule crel.naf     $BIND/evcoref           ecrf.naf
+@%   runmodule ecrf.naf     $BIND/factuality        fact.naf
+@%   runmodule fact.naf     $BIND/opinimin          out.naf
+@% }
+@% 
+@% export apply_english_pipeline
+@% 
+@% @| @}
 
 When processing is ready, the \NAF's involved must be placed in the
 correct location. When processing has been successful, the produced
@@ -1859,25 +1898,30 @@ export LC_ALL=en_US.utf8
 \label{sec:jobfiletemplate}
 
 Now we know what the job has to do, we can generate the script. It
-executes the functions \verb|passeer| and \verb|veilig| to ensure that
-the management script is not  
+executes the functions \verb|passeer| and \verb|veilig|.
 
-@o m4_projroot/m4_jobname.m4 @{@%
-m4_<!!>changecom()m4_dnl
-#!/bin/bash
-#PBS -lnodes=1
-<!#!>PBS -lwalltime=m4_<!!>walltime
+The job will be submitted into the \textsc{slurm} job-control system
+of Lisa. Documentation of this system can be found in the
+\href{https://userinfo.surfsara.nl/systems/lisa/user-guide/creating-and-running-jobs#submit}{documentation}
+of Surfsara. There is also a
+\href{https://userinfo.surfsara.nl/documentation/translate-pbstorque-slurm}{cheat sheet} 
+with the differences between the Torque and the \textsc{slurm} system, that seems more up-to-date.
+
+@o m4_projroot/m4_jobfilename @{@%
+#!/bin/sh
+#SBATCH --nodes=1
+<!#!>SBATCH  --time=m4_walltime_minutes
 @< set local parameters in the job @>
 source m4_aprojroot/parameters
 @< Start the bloody eSRL server @>
-export jobname=$PBS_JOBID
+export jobname=\$SLURM_JOB_NAME
 @< log that the job starts @>
 @< set utf-8 @>
 @% @< initialize sematree @>
 @% passeer
 @% veilig
 @< load stopos module @>
-@< load python module @>
+@% module load python/2.7.9
 @< functions @>
 @< functions in the jobfile @>
 check_start_spotlight nl
@@ -1897,15 +1941,23 @@ exit
 \subsection{Synchronisation mechanism}
 \label{sec:synchronisation}
 
-Make a mechanism that ensures that only a single process can execute
-some functions at a time. Currently we only use this to make sure that
-only one instance of the management script runs. This is necessary
-because loading Stopos with a huge amount of filenames takes a lot of
-time and we don not want that a new instance of the management script
-interferes with this.
+This software allows parallel processes to run simultaneously, which
+can cause unwanted phenomena like two processes that try to annotate
+the same input-file at the same time.
+
+In fact, we know of two problems that can occur due to processes
+running in parallel. The first problem, two processes that pick the
+same input-file for processing, is prevented by using the
+\href{https://userinfo.surfsara.nl/systems/lisa/software/stopos}{``Stopos''}
+utility (see section \ref{sec:manage-by-stopos}). The other parallelisation problem
+might be, that the \verb|runit| script takes a very long time to
+complete and in the mean time the script is started again, causing two
+instances of the script to run at the same time. This situation is not
+imaginary, because loading Stopos with a huge amount of filenames takes a lot of
+time.
 
 The script \verb|sematree|, obtained from
-\url{http://www.pixelbeat.org/scripts/sematree/} allows this kind of
+\url{http://www.pixelbeat.org/scripts/sematree/} allows
 ``mutex'' locking. Inside information learns that sematree is
 available on Lisa (in \verb|m4_sematree_script_location|). To lock
 access Sematree places a file in a \emph{lockdir}. The directory where
@@ -1916,10 +1968,15 @@ well as for the jobs. Its name must be present in variable
 @d initialize sematree @{@%
 export workdir=m4_aworkdir
 mkdir -p $workdir
-@| @}
+@| workdir @}
 
-Now we can implement functions \verb|passeer| (gain exclusive access)
-and \verb|veilig| (give up access).
+Now we can implement functions \verb|passeer| (gain exclusive access),
+\verb|veilig| (give up access) and \verb|runsingle| (gain immediate
+exclusive access). The difference between function \verb|passeer| and
+\verb|runsingle| is, that the former function waits until it can gain
+exclusive access and the latter tries to get immediate exclusive
+access and abort the process that called it if the attempt is not
+successful. 
 
 
 @d functions @{@%
@@ -1942,7 +1999,14 @@ function veilig () {
 @| passeer veilig @}
 
 Occasionally a process applies the \verb|passeer| function, but is
-aborted before it could apply the \verb|veilig| function.  
+aborted before it could apply the \verb|veilig| function. In that
+case, the resource that has been shielded by the synchronisation
+mechanism would no longer be available for other processes. To prevent
+this, the ``lock'' for that resource must eventually be removed in
+some other way. The following function \verb|remove_obsolete_lock|
+removes a lock if it has been present for a long time. The maximum
+time that a lock is allowed to exist, \verb|max_minutes|, has a
+default value of m4_default_max_minutes_to_remove_lock minutes. 
 
 @d functions @{@%
 
@@ -1952,11 +2016,22 @@ function remove_obsolete_lock {
   if
     [ "$max_minutes" == "" ]
   then
-   local max_minutes=60
+   local max_minutes=m4_default_max_minutes_to_remove_lock
   fi
   find $workdir -name $lock -cmin +$max_minutes -print | xargs -iaap rm -rf aap
 }
+@| remove_obsolete_lock @}
+
+
+The following macro, applied in the \verb|runit| script, makes sure
+that the script will not continue to run when another instance of the
+script is still running..
+
+@d die if another instance of runit is running @{@%
+remove_obsolete_lock runit_runs
+runsingle runit_runs
 @| @}
+
 
 
 \subsubsection{Count processes in jobs}
@@ -1990,7 +2065,7 @@ sematree release countlock
 sematree acquire countlock
 proccount=`sematree dec countlock`
 sematree release countlock
-echo "Process $proccunt stops." >&2
+echo "Process $proccount stops." >&2
 if
   [ $proccount -eq 0 ]
 then
@@ -2284,326 +2359,6 @@ echo "No working processes left. Exiting." >&2
 @% wait
 
 
-\subsection{The job management script}
-\label{sec:jobtrack}
-
-
-@% \subsubsection{Keep it going}
-@% \label{sec:koopgoing}
-@% 
-@% The script \verb|runit| performs job management. Therefore, this
-@% script must be started at regular intervals. We cannot install
-@% cron-jobs on Lisa to do this. Therefore, it would be a good idea to to
-@% have jobs starting runit now and
-@% then. I tried to do that over ssh, but it did not succeed (timed out). 
-@% 
-@% @% @d parameters @{@%
-@% @% export runit_deadtime=m4_runit_deadtime
-@% @% @| runit_deadtime @}
-@% @% 
-@% @% @d set runit timestamp @{@%
-@% @% echo `date +%s` >m4_runittimefile
-@% @% @| @}
-@% @% 
-@% @% @d invoke the runit script @{@%
-@% @% startrunit=0
-@% @% if
-@% @%   [ -e "m4_runittimefile" ] 
-@% @% then
-@% @%   lasttime=`cat m4_runittimefile`
-@% @%   now=`date +%s`
-@% @%   elapsed_seconds=$((now - $lasttime))
-@% @%   min_seconds=$((runit_deadtime * 60))
-@% @%   if
-@% @%     [ $elapsed_seconds -le $min_seconds ]
-@% @%   then
-@% @%     startrunit=1
-@% @%   fi
-@% @% fi
-@% @% if
-@% @%   [ $startrunit -eq 0 ]
-@% @% then
-@% @%   @< set runit timestamp @>
-@% @%   ssh -o PubkeyAuthentication=yes $USER@@m4_lisahost "nohup m4_aprojroot/runit &"
-@% @% fi
-@% @% @| @}
-@% 
-@% 
-@% 
-@% @% When we have received files to be parsed we have to submit the proper
-@% @% amount of jobs. To determine whether new jobs have to be
-@% @% submitted we have to know the number of waiting and running
-@% @% jobs. Unfortunately it is too costly to often request a list of
-@% @% running jobs. Therefore we will make a bookkeeping. File
-@% @% \verb|m4_jobcountfile| contains a list of the running and waiting
-@% @% jobs.
-@% @% 
-@% @% @d parameters @{@%
-@% @% JOBCOUNTFILE=m4_jobcountfile
-@% @% @| JOBCOUNTFILE @}
-@% @% 
-@% @% 
-@% @% It is updated as follows:
-@% @% 
-@% @% \begin{itemize}
-@% @% \item When a job is submitted, a line containing the job-id, the word
-@% @%   ``wait'' and a timestamp is added to the file.
-@% @% \item A job that starts, replaces in the line with its job-id the word
-@% @%   ``waiting'' by running and replaces the timestamp.
-@% @% \item A job that ends regularly, removes the line with its job-id.
-@% @% \item A job that ends leaves a log message. The filename consists of a 
-@% @%   concatenation of the jobname, a dot, the character ``o'' and the
-@% @%   job-id. At a regular basis the existence of such files is checked
-@% @%   and \verb|\$JOBCOUNTFILE| updated. 
-@% @% \end{itemize}
-@% @% 
-@% @% 
-@% @% Submit a job and write a line in the jobcountfile. The line consists
-@% @% of the jobnumber, the word ``wait'' and the timestamp in universal seconds.
-@% @% 
-@% @% @d submit a job @{@%
-@% @% @% passeer
-@% @% qsub m4_aprojroot/m4_jobname | \
-@% @%  gawk -F"." -v tst=`date +%s`  '{print $1 " wait " tst}' \
-@% @%  >> \$JOBCOUNTFILE
-@% @% @< write log @(Updated jobcountfile@) @>
-@% @% @% veilig
-@% @% @| @}
-@% @% 
-@% @% When a job starts, it performs some bookkeeping. It finds out its own job number and changes \verb|wait| into \verb|run|  in the bookeepfile.
-@% @% 
-@% @% @d perform jobfile-bookkeeping @{@%
-@% @% @< find out the job number @>
-@% @% prognam=m4_jobname$JOBNUM
-@% @% @< write log @(start@) @>
-@% @% @< change ``wait'' to ``run'' in jobcountfile @>
-@% @% @| @}
-@% @% 
-@% @% The job \textsc{id} begins with the number,
-@% @% e.g. \verb|6670732.batch1.irc.sara.nl|. 
-@% @% 
-@% @% @d find out the job number @{@%
-@% @% JOBNUM=\${PBS_JOBID%%.*}
-@% @% @| @}
-@% @% 
-@% @% @d change ``wait'' to ``run'' in jobcountfile @{@%
-@% @% @%stmp=`date +%s`
-@% @% if [ -e \$JOBCOUNTFILE ]
-@% @% then
-@% @%   passeer
-@% @%   mv \$JOBCOUNTFILE \$tmpfil
-@% @%   gawk -v jid=\$JOBNUM -v stmp=`date +%s` \
-@% @%     '@< awk script to change status of job in joblist @>' \
-@% @%     \$tmpfil >\$JOBCOUNTFILE
-@% @%   veilig
-@% @%   rm -rf \$tmpfil
-@% @% fi
-@% @% @| @}
-@% @% 
-@% @% @d awk script to change status of job in joblist @{@%
-@% @% BEGIN {WRIT="N"};
-@% @% { if(match(\$0,"^"jid)>0) {
-@% @%      print jid " run  " stmp;
-@% @%      WRIT="Y";
-@% @%   } else {print}
-@% @% };
-@% @% END {
-@% @%   if(WRIT=="N") print jid " run  " stmp;
-@% @% }@%
-@% @% @| @}
-@% @% 
-@% @% 
-@% @% 
-@% @% When a job ends, it removes the line:
-@% @% 
-@% @% @d remove the job from the counter @{@%
-@% @% passeer
-@% @% mv \$JOBCOUNTFILE \$tmpfil
-@% @% gawk -v jid=\$JOBNUM  '\$1 !~ "^"jid {print}' \$tmpfil >\$JOBCOUNTFILE
-@% @% veilig
-@% @% rm -rf \$tmpfil
-@% @% @| @}
-@% @% 
-@% @% Periodically check whether jobs have been killed before completion and
-@% @% have thus not been able to remove their line in the jobcountfile. To
-@% @% do this, write the jobnumbers in a temporary file and then check the
-@% @% jobcounter file in one blow, to prevent frequent locks.
-@% @% 
-@% @% 
-@% @% @d do brief check of expired jobs @{@%
-@% @% obsfil=`mktemp --tmpdir obs.XXXXXXX`
-@% @% rm -rf \$obsfil
-@% @% @< make a list of jobs that produced logfiles @(\$obsfil@) @>
-@% @% @< compare the logfile list with the jobcounter list @(\$obsfil@) @>
-@% @% rm -rf \$obsfil
-@% @% @| @}
-@% @% 
-@% @% @d do the frequent tasks @{@%
-@% @% @< do brief check of expired jobs @>
-@% @% @| @}
-@% @% 
-@% @% @%@d do thorough check of expired jobs @{@%
-@% @% @%@< check whether update is necessary @(\$thoroughjobcheckfil@,180@,thoroughjobcheck@) @>
-@% @% @%if \$thoroughjobcheck
-@% @% @%then
-@% @% @%@% @< skip brief jobcheck @>
-@% @% @% @< verify jobs-bookkeeping @>
-@% @% @%fi
-@% @% @%@| @}
-@% 
-@% 
-@% 
-@% 
-@% When a job has ended, a logfile, and sometimes an error-file, is
-@% produced. The name of the logfile is a concatenation of the jobname, a
-@% dot, the character \verb|o| and the jobnumber. The error-file has a
-@% similar name, but the character \verb|o| is replaced by
-@% \verb|e|. Generate a sorted list of the jobnumbers and
-@% remove the logfiles and error-files:
-@% 
-@% @d make a list of jobs that produced logfiles @{@%
-@% for file in m4_jobname.o*
-@% do
-@%   JOBNUM=\${file<!##!>m4_jobname.o}
-@%   echo \${file<!##!>m4_jobname.o} >>\$tmpfil
-@%   rm -rf m4_jobname.[eo]\$JOBNUM
-@% done
-@% sort < \$tmpfil >@1
-@% rm -rf \$tmpfil
-@% @| @}
-@% 
-@% Remove the jobs in the list from the counter file if they occur there.
-@% 
-@% @d compare the logfile list with the jobcounter list @{@%
-@% if [ -e \$JOBCOUNTFILE ]
-@% then
-@%   passeer
-@%   sort < \$JOBCOUNTFILE >\$tmpfil
-@%   gawk -v obsfil=@1 ' 
-@%     BEGIN {getline obs < obsfil}
-@%     { while((obs<\$1) && ((getline obs < obsfil) >0)){}
-@%       if(obs==\$1) next;
-@%       print
-@%     }
-@%   ' \$tmpfil >\$JOBCOUNTFILE
-@%   veilig
-@% fi
-@% rm -rf \$tmpfil
-@% @| @}
-@% 
-@% From time to time, check whether the jobs-bookkeeping is still
-@% correct.
-@% To this end, request a list of jobs from the operating
-@% system. 
-@% 
-@% @d verify jobs-bookkeeping @{@%
-@% actjobs=`mktemp --tmpdir act.XXXXXX`
-@% rm -rf \$actjobs
-@% qstat -u  phuijgen | grep m4_jobname | gawk -F"." '{print \$1}' \
-@%  | sort  >\$actjobs
-@% @< compare the active-jobs list with the jobcounter list @(\$actjobs@) @>
-@% rm -rf \$actjobs
-@% @| @}
-@% 
-@% @d do the now-and-then tasks @{@%
-@% @< verify jobs-bookkeeping @>
-@% @| @}
-@% 
-@% 
-@% @d compare the active-jobs list with the jobcounter list @{@%
-@% if [ -e \$JOBCOUNTFILE ]
-@% then
-@%   passeer
-@%   sort < \$JOBCOUNTFILE >\$tmpfil
-@%   gawk -v actfil=@1 -v stmp=`date +%s` ' 
-@%     @< awk script to compare the active-jobs list with the jobcounter list @>
-@%   ' \$tmpfil >\$JOBCOUNTFILE
-@%   veilig
-@%   rm -rf \$tmpfil
-@% else
-@%   cp @1 \$JOBCOUNTFILE
-@% fi
-@% @| @}
-@% 
-@% Copy lines from the logcount file if the jobnumber matches a line in
-@% the list actual jobs. Write entries for jobnumbers that occur only in
-@% the actual job list.
-@% 
-@% @d awk script to compare the active-jobs list with the jobcounter list @{@%
-@% BEGIN {actlin=(getline act < actfil)}
-@% { while(actlin>0 && (act<\$1)){ 
-@%      print act " wait " stmp;
-@%      actlin=(getline act < actfil);
-@%   };
-@%   if((actlin>0) && act==\$1 ){
-@%      print
-@%      actlin=(getline act < actfil);
-@%   }
-@% }
-@% END {
-@%     while((actlin>0) && (act ~ /^[[:digit:]]+/)){
-@%       print act " wait " stmp;
-@%     actlin=(getline act < actfil);
-@%  };
-@% }
-@% @| @}
-
-
-@% \subsubsection{Submit extra jobs}
-@% \label{sec:submit}
-@% 
-@% Check how many files have to be parsed (\verb|NRFILES|) and how many
-@% jobs there are (\verb|NRJOBS|). If there are more than m4_filesperjob
-@% files per job, submit extra jobs. Cap the number of jobs to maximimum
-@% of m4_maxjobs
-@% 
-@% When before submitting jobs it turns out that, although no job is
-@% running at all, there are files in \verb|proctray|. In that case, they
-@% can be moved back to the intray.
-
-
-@% @d check/perform every time @{@%
-@% @< replace files from proctray when no processes are running @>
-@% @< submit jobs when necessary @>
-@% @| @}
-
-
-
-
-@% @d submit jobs when necessary @{@%
-@% @%@< get number of jobs and number of input files @(NRJOBS@,NRFILES@) @>
-@% NRFILES=`ls -1 \$INBAK |  wc -l`
-@% if [ -e \$JOBCOUNTFILE ]
-@% then
-@%   NRJOBS=`wc -l < \$JOBCOUNTFILE`
-@% else
-@%   NRJOBS=0
-@% fi
-@% @< derive number of jobs to be submitted @(SUBJOBS@) @>
-@% @< write log @(start \$SUBJOBS jobs@) @>
-@% @< submit extra jobs @(SUBJOBS@) @>
-@% @| @}
-
-
-
-@% @d derive number of jobs to be submitted  @{@%
-@% REQJOBS=\$(( \$(( \$NRFILES / m4_filesperjob )) ))
-@% if [ \$REQJOBS -gt m4_maxjobs ]
-@% then
-@%   REQJOBS=m4_maxjobs
-@% fi
-@% if [ \$NRFILES -gt 0 ]
-@% then
-@%   if [ \$REQJOBS -eq 0 ]
-@%   then
-@%     REQJOBS=1
-@%   fi
-@% fi
-@% @1=\$(( \$REQJOBS - \$NRJOBS ))
-@% 
-@% @| @}
-
-
 
 
 \subsection{The management script}
@@ -2618,11 +2373,7 @@ cd $root
 @< initialize sematree @>
 @< get runit options @>
 @< functions @>
-remove_obsolete_lock runit_runs
-@% @< remove old lockdir @(runit_runs@) @>
-runsingle runit_runs
-@% runsingle
-@% @< init logfile @>
+@< die if another instance of runit is running @>
 @< load stopos module @>
 @< check/create directories @>
 @% @< reset if nothing is to be done @>
@@ -2675,13 +2426,14 @@ shift $((OPTIND-1))
 Print the summary:
 
 @d print summary @{@%
-echo in         : $incount
-echo proc       : $proccount
-echo failed     : $failcount
-echo processed  : $((logcount - $failcount))
-echo jobs       : $jobcount
-echo running    : $running_jobs
-echo submitted  : $jobs_to_be_submitted
+echo "in           : $incount"
+echo "proc         : $proccount"
+echo "failed       : $failcount"
+echo "processed    : $((logcount - $failcount))"
+echo "jobs (Lisa)  : $lisa_jobcount"
+echo "jobs (shad)  : $my_jobcount"
+echo "running jobs : $running_jobs"
+echo "submitted    : $jobs_to_be_submitted"
 if
   [ ! "$jobid" == "" ]
 then
@@ -3525,7 +3277,7 @@ DIRS = @< directories to create @>
 @| DIRS @}
 
 @d make scripts executable @{@%
-chmod -R 775  m4_bindir/*
+@% chmod -R 775  m4_bindir/*
 chmod -R 775  m4_envbindir/*
 @| @}
 
