@@ -3,13 +3,14 @@ m4_dnl
 m4_dnl Settings that are likely to vary
 m4_dnl
 m4_define(m4_walltime, 30:00)m4_dnl   Max duration of a job
-m4_define(m4_walltime_minutes, `30')m4_dnl   Max duration of a job
+m4_define(m4_walltime_minutes, `03')m4_dnl   Max duration of a job
 m4_define(m4_filesperjob, `100')m4_dnl
 m4_define(m4_maxjobs, `200')m4_dnl
 m4_define(m4_timeoutsecs, 1500)m4_dnl
 m4_define(m4_maxprocminutes, `30')m4_dnl
 m4_define(m4_logging, true)m4_dnl
 m4_define(m4_maxjoblogminutes, `1440')m4_dnl
+m4_define(m4_maxoutfiledays, 30)m4_dnl
 m4_define(m4_pipelineroot, /home/phuijgen/nlp/nlpp)m4_dnl
 m4_define(m4_default_max_minutes_to_remove_lock, 60)m4_dnl
 m4_dnl m4_define(m4_pipelinescript, /home/phuijgen/usrlocal/bin/nlpp)m4_dnl
@@ -38,10 +39,11 @@ m4_define(m4_indir, m4_adatadir/in)m4_dnl
 m4_define(m4_adatadir, m4_adatadir/out)m4_dnl
 m4_define(m4_indir, m4_adatadir/out)m4_dnl
 m4_define(m4_outdir, m4_adatadir/out)m4_dnl
-m4_define(m4_logdir, m4_adatadir/log)m4_dnl
+m4_define(m4_datalogdir, m4_adatadir/log)m4_dnl
 m4_define(m4_faildir, m4_adatadir/fail)m4_dnl
 m4_define(m4_procdir, m4_adatadir/proc)m4_dnl
 m4_define(m4_timeouterr, 124)m4_dnl
+m4_define(m4_alogdir, m4_aprojroot/logs)m4_dnl
 m4_dnl
 m4_define(m4_memperprocess, `3')m4_dnl
 m4_define(m4_jobcountfile, m4_aprojroot/.jobcount)m4_dnl
