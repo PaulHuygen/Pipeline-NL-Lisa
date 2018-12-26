@@ -146,7 +146,7 @@ export intray=m4_indir
 export proctray=m4_procdir
 export outtray=m4_outdir
 export failtray=m4_faildir
-export logtray=m4_logdir
+export logtray=m4_datalogdir
 @| root intray outtray failtray logtray @}
 
 
@@ -155,7 +155,7 @@ export logtray=m4_logdir
 \label{sec:management-script}
 
 When a user has put \NAF{} files in \verb|data/in|, something has to
-take care of starting jobs ot annotate the files and moving abandoned
+take care of starting jobs to annotate the files and moving abandoned
 files from the proctray back to the intray. This is performed by a
 script named \verb|runit|, that should be started from time to
 time. When there are files present in the intray, runit should
@@ -165,7 +165,12 @@ be started 2-3 times per hour.
 \label{sec:modulelist}
 
 In the annotation process a series of \NLP{} modules operate in
-sequence on the \NAF{}. The annotation-process is described in
+sequence on the \NAF{}. The constructions of these modules and the
+script that invokes the annotation are not part of this package. In
+this document we assume that there exists a script named \verb|nlpp|,
+located in 
+
+The annotation-process is described in
 section~\ref{sec:perform}. 
 
 
@@ -190,7 +195,7 @@ files, the outputs are similar trees with \NAF{} files and log
 files. The system generates processes that run at the same time, reading files from the
 input tree. It must be made certain that each file is processed by
 only one process. This section describes and builds the directory
-trees and the ``stopos'' system that supplies paths to input \NAF{}
+trees and the ``Stopos'' system that supplies paths to input \NAF{}
 files to the processes.
 
 \subsection{Move NAF-files around}
@@ -293,8 +298,8 @@ unreadycount=$((incount + $proccount))
 
 
 The processes empty the directory-structure in the intray and the
-proctray. So, it might be a good idea to clean up the
-directory-structure itself.
+proctray, but they do not remove empty directories. Therefore, the
+\verb|runit| script has to do this.
 
 @d check/create directories @{@%
 find $intray -depth -type d -empty -delete
@@ -349,6 +354,23 @@ export procpath=${procfile%/*}
 export logpath=${logfile%/*}
 @| filtrunk outfile logfile procfile outpath procpath logpath @}
 
+\subsection{Clean up}
+\label{sec:clean-up}
+
+Not everybody removes her output-files after she copied them to her
+own directory. Especially log-files tend to escape the attention of
+the users. Therefore, let us remove log-files and output-files that
+exist for longer that a month.
+
+@d clean up outputfiles and logfiles @{@%
+find $logtray -ctime +<!!>m4_maxoutfiledays -delete
+find $outtray -ctime +<!!>m4_maxoutfiledays -delete
+find $failtray -ctime +<!!>m4_maxoutfiledays -delete
+@| @}
+
+
+
+
 \subsection{Manage list of files in Stopos}
 \label{sec:manage-by-stopos}
 
@@ -361,7 +383,7 @@ system that has been implemented in Lisa. The management script makes a list
 of the files in \verb|\data\in| and passes it to a ``stopos pool''
 where the work processes can find them.
 
-A difficulty is, that there is no way to look into stopos, other than
+A difficulty is, that there is no way to look into Stopos, other than
 to pick a file. The intended way of using Stopos is, to fill it with a
 given set of parameters and then start jobs that process the
 parameters one-by-one until there are no unused parameters left. In
@@ -372,7 +394,7 @@ not. Therefore we need a kind of shadow-bookkeeping, listing the files
 that have already been added to Stopos and removing processed files
 from the list.
 
-In order to be able to use stopos, first we have to ``load'' the
+In order to be able to use Stopos, first we have to ``load'' the
 ``stopos module'':
 
 @d load stopos module @{@%
@@ -393,35 +415,86 @@ export stopospool=m4_stopospool
 
 In this section filenames are added to the Stopos pool.
 Adding a large amount of filenames takes much
-time, so we do this sparingly. We do it as follows:
+time, so we do this sparingly.
+
+If the Stopos pool contains enough filenames to keep the system
+working for the next thirty minutes, we leave it as it is.
+
+When we want to add filenames to a running pool, we have to make sure
+that they are not already listed in the pool. Therefore, we need a
+shadow-bookkeeping that is accessible to us. When the \verb|runit|
+script updates the pool it generates a file \verb|old.infilelist| with
+a sorted listing of the contents of the pool.
+
+The next time that \verb|runit| runs, it generates a list of names
+of files that are in the intray, but not in the pool and then adds
+these filenames to the pool and to
+verb|old.infilelist|. A complication are the files in the
+proctray. Sometimes they are transferred back to the intray, and
+recognised as new file of which the name is not yet listed in the
+pool. Therefore runit starts to remove names of files in the proctray
+from \verb|old.filenames|.
+
+
 \begin{enumerate}
-\item First look how many filenames are still available in the
-  pool. If there are still sufficient filenames in the pool to keep
-  the jobs working for the next half hour, we do nothing. On the other
-  hand. If the pool is empty, we renew it (i.e. purge it and
-  re-generate a new, empty pool). In this way the contents of the pool
-  is aligned with the shadow-bookkeeping of the filenames. Also when
-  there are no jobs or when there are no files in the intray, we renew
-  the pool. If the pool is running out, we add filenames to the pool. 
-\item Generate a file \verb|infilelist| that contains the paths to the files in
+\item Remove the names of files in the proctray from
+  \verb|old.infilelist|.
+\item Check whether the intray is empty. we need to know this later on.
+\item Move files in the proctray of which we know that they are no
+  longer being processed back to the intray. That means that, when
+  there are jobs running, all the files in the proctray can be
+  transferred, and otherwise, files that resided in the proctime for a
+  longer time than the maximum
+  lifetime of a job can be transferred.
+\item Check whether we can renew the pool (purge its contents and
+  re-fill). We can do that when it is empty or when there are no jobs in
+  the system. When the pool is renewed, its contents is aligned with
+  the shadow-bookkeeping.
+\item Generate a sorted file \verb|infilelist| that contains the paths to the files in
   the intray.
-\item Assume file \verb|old.filenames|, if it exists, contains the
-  filenames that have been inserted in the Stopos pool.
+\item Remove the filenames in \verb|old.infilelist| from \verb|infilelist|.
 \item Delete from \verb|old.filenames| the names of the
-  files that are no longer in the intray. They have probably been
-  processed or are being processed.
-\item  Move the files in the proctray that are not actually being
-  processed back the intray. We know that these files are not being
-  processed because either there are no running jobs or the files reside
-  in the proctray for a longer time than jobs are allowed to run.
-\item Make file \verb|infilelist| that lists files that are
-  currently in the intray.
+  files that are no longer in the intray.
 \item Remove the filenames that can also be found in
   \verb|old.infilelist| from \verb|infilelist|. After that
   \verb|infilelist| contains names of files that are not yet in the pool. 
 \item Add the files in \verb|infilelist| to the pool.
 \item Add the content of \verb|infilelist| to \verb|old.infilelist|.
 \end{enumerate}
+
+First an aside: One of the tasks that we have to perform is, to
+compare two (sorted) lists of filenames, and then produce a list of
+the filenames that are present in the first list, but not in the
+second. The following macro does this. It has two arguments: 1) The
+name of the file with all the names, 2) the name of the file with
+filenames that must be removed. It replaces the file in the first
+argument with a file that contains the net result. and 3) the name of the file with the
+net result.
+
+@d subtract filenames @{@%
+subfile=`mktemp -t subfile.XXXXXX`
+comm -23 @1 @2 >$subfile
+mv $subfile @1
+@| subfile @}
+
+@d keep common filenames @{@%
+subfile=`mktemp -t subfile.XXXXXX`
+comm -12 @1 @2 >$subfile
+mv $subfile @1
+@|  @}
+
+
+@d subtract files in proctray from shadow bookkeeping @{@%
+cd $root
+proclist=`mktemp -t proclist.XXXXXX`
+gawcomm="{gsub(\"$proctray\", \"$intray\"); print}"
+find $proctray -type f -print \
+  | gawk "$gawcomm" \
+  | sort >$proclist
+@< subtract filenames @(old.infilelist@,$proclist@) @>
+rm $proclist
+@| proclist @}
+
 
 
 @d update the stopos pool @{@%
@@ -430,10 +503,11 @@ cd $root
 if
   [ \$pool_full -ne 0 ]
 then
+  @< subtract files in proctray from shadow bookkeeping @>
+  @< clean up proctray @>
   @< make a list of filenames in the intray @>
   @< decide whether to renew the stopos-pool @>
   @< clean up pool and old.filenames @>
-  @< clean up proctray @>
   @< add new filenames to the pool @>
 fi
 @|pool_full pool_empty @}
@@ -445,7 +519,7 @@ enough filenames to keep Lisa working for the next half hour. Probably
 Lisa's job-control system does not allow us to run more than 100 jobs
 at the same time. Typically a job runs seven parallel processes. Each
 process will probably handle at most one \NAF{} file per minute. That
-means, that if stopos contains $100 \times 7 \times 30 = 21 \times 10^{3}$
+means, that if Stopos contains $100 \times 7 \times 30 = 21 \times 10^{3}$
 filenames, Lisa can be kept working for half an hour. Let's round this
 number to m4_sufficient_stopos_entries.
 
@@ -493,6 +567,7 @@ fi
 @| @}
 
 @d  make a list of filenames in the intray @{@%
+cd $root
 find \$intray -type f -print | sort >infilelist
 @| infilelist @}
 
@@ -525,43 +600,69 @@ then
   rm -f old.infilelist
   touch old.infilelist
 else
-    @< clean up old.infilelist @>
+    @< clean up old.infilelist and infilelist @>
 fi
 
 @| @}
 
-Update the content of \verb|old.infilelist| so that, as far as we know, it contains only
-names of files that are still in the pool. Update \verb|infilelist|
-so that it only contains names of files that reside in the intray but
-not yet in the pool. 
+Update the content of \verb|old.infilelist|. Names of files that are
+not in the intray, have probably also been removed from the pool. So
+remove them from the shadow-bookkeeping as well. After that, remove
+filenames that are already in \verb|old.infilelist| from
+\verb|infilelist|. After that, \verb|infilelist| contains the names of
+new filenames that have to be added to the pool.
 
-@d clean up old.infilelist @{@%
-comm -12 old.infilelist infilelist >temp.infilelist
-cp temp.infilelist old.infilelist
-comm -13 old.infilelist infilelist >temp.infilelist
-cp temp.infilelist infilelist
+@% @d clean up old.infilelist @{@%
+@% comm -12 old.infilelist infilelist >temp.infilelist
+@% cp temp.infilelist old.infilelist
+@% comm -13 old.infilelist infilelist >temp.infilelist
+@% cp temp.infilelist infilelist
+@% @| @}
+
+@d clean up old.infilelist and infilelist @{@%
+@< keep common filenames @(old.infilelist@,infilelist@) @>
+@< subtract filenames @(infilelist@,old.infilelist@) @>
 @| @}
 
-Make a list of names of files in the proctray that should be moved to
-the intray, either because they reside longer in the proctray than the
-lifetime of jobs or because there are no running jobs.  Move the files
-in the list back to the intray and add the list to
-\verb|infilelist|. \textbf{Note:} that after this \verb|infilelist| is
-no longer sorted.
+If there exist jobs, move files that resided longer in the proctray
+than the lifetime of a job back to the in-tray. If there are no jobs,
+move all files in the proctray back to the intray. Before doing that,
+remove the names of the files in the proctray from the list of
+filenames that were stored in the Stopos pool last time (\verb|old.infilelist|).
 
 @d clean up proctray @{@%
 if
-  [ $running_jobs -eq 0 ]
+  [ \$lisa_jobcount -eq 0 ]
 then
-  find $proctray -type f -print | sort >oldprocfilelist
+  find $proctray -type f -print | xargs -iaap  bash -c 'movetotray aap $proctray $intray'
 else
-  find $proctray -type f -cmin +$maxproctime -print | sort  >oldprocfilelist
+  find $proctray -type f -cmin +$maxproctime -print | xargs -iaap  bash -c 'movetotray aap $proctray $intray'
 fi
-cat oldprocfilelist | xargs -iaap  bash -c 'movetotray aap $proctray $intray'
-gawk '{gsub(PROCTRAY, INTRAY); print}' PROCTRAY=$proctray INTRAY=$intray <oldprocfilelist >>infilelist
 @% cat infilelist oldprocfilelist >temp.infilelist
 @% mv temp.infilelist infilelist
 @| @}
+
+
+@% Make a list of names of files in the proctray that should be moved to
+@% the intray, either because they reside longer in the proctray than the
+@% lifetime of jobs or because there are no running jobs.  Move the files
+@% in the list back to the intray and add the list to
+@% \verb|infilelist|. \textbf{Note:} that after this \verb|infilelist| is
+@% no longer sorted.
+@% 
+@% @d clean up proctray @{@%
+@% if
+@%   [ $running_jobs -eq 0 ]
+@% then
+@%   find $proctray -type f -print | sort >oldprocfilelist
+@% else
+@%   find $proctray -type f -cmin +$maxproctime -print | sort  >oldprocfilelist
+@% fi
+@% cat oldprocfilelist | xargs -iaap  bash -c 'movetotray aap $proctray $intray'
+@% gawk '{gsub(PROCTRAY, INTRAY); print}' PROCTRAY=$proctray INTRAY=$intray <oldprocfilelist >>infilelist
+@% @% cat infilelist oldprocfilelist >temp.infilelist
+@% @% mv temp.infilelist infilelist
+@% @| @}
 
 Add the names of the files in the intray that are not yet in the pool
 to the pool. Then update \verb|old.infilelist|.
@@ -806,46 +907,61 @@ following:
 \item Submit the extra jobs.
 \end{enumerate}
 
+
+\subsubsection{Count the jobs}
+\label{sec:count_jobs}
+
+
 Find out how many submitted jobs there are and how many of them are
-actually running. Lisa supplies an instruction \verb|squeue| that
-produces a list of running and waiting jobs. However, it has happened that the list was not
-complete. Therefore we need to make job bookkeeping.
+actually running. We will make a double bookkeeping. The first system
+is, to look in the reports from Lisa, as obtained by the instruction
+\verb|squeue| (see the man-page of \verb|squeue|). The second way is,
+that we store the number of submitted jobs in a file, add the number
+of newly submitted jobs to it and subtract the number of finished jobs
+from it.
 
-File \verb|jobcounter| lists the number of jobs. When extra jobs are
-submitted, the number is increased. When logfiles are found that jobs
-produce when they end, the number is decreased. 
+Lisa supplies an instruction \verb|squeue| that
+produces a list of running and waiting jobs. However, in the former
+job-control system torque I had the experience that the joblisting
+were not always adequate. Therefore, in the past we made a shadow job
+bookkeeping as well.
 
-@d count jobs @{@%
-if
-  [ -e jobcounter ]
-then
-  export my_jobcount=`cat jobcounter`
-else
-  my_jobcount=0
-fi
-@| @}
-
-Count the logfiles that finished jobs produce. Derive the number of
-jobs that have been finished since last time. Move the logfiles to
-directory \verb|joblogs|. It is possible that jobs finish and produce
-logfiles while we are doing all this. Therefore we start to make a
-list of the logfiles that we will process.
-
-@d count jobs @{@%
-cd $root
-finished_jobs=`ls -1 slurm-*.out | wc -l`
-@% finished_jobs=`cat jobloglist | grep "\.e" | wc -l`
-mkdir -p joblogs
-mv slurm-*.out joblogs/
-@% cat jobloglist | xargs -iaap mv aap joblogs/
-if
-  [ $finished_jobs -gt $my_jobcount ]
-then
-  my_jobcount=0
-else
-  my_jobcount=$((my_jobcount - $finished_jobs))
-fi
-@| my_jobcount @}
+@% @d count jobs @{@%
+@% if
+@%   [ -e jobcounter ]
+@% then
+@%   export my_jobcount=`cat jobcounter`
+@% else
+@%   my_jobcount=0
+@% fi
+@% @| my_jobcount @}
+@% 
+@% Count the logfiles that finished jobs produce. Derive the number of
+@% jobs that have been finished since last time. Move the logfiles to
+@% directory \verb|joblogs|. It is possible that jobs finish and produce
+@% logfiles while we are doing all this. Therefore we start to make a
+@% list of the logfiles that we will process.
+@% 
+@% @d count jobs @{@%
+@% cd $root
+@% finished_jobs=`find ./ -maxdepth 1 -name "slurm*.out" -print | wc -l`
+@% @% finished_jobs=`cat jobloglist | grep "\.e" | wc -l`
+@% 
+@% if
+@%   [ $finished_jobs -gt 0 ]
+@% then
+@%   mkdir -p joblogs
+@%   mv slurm-*.out joblogs/
+@% fi
+@% @% cat jobloglist | xargs -iaap mv aap joblogs/
+@% if
+@%   [ $finished_jobs -gt $my_jobcount ]
+@% then
+@%   my_jobcount=0
+@% else
+@%   my_jobcount=$((my_jobcount - $finished_jobs))
+@% fi
+@% @| my_jobcount @}
 
 Extract the summaries of
 the numbers of running jobs and the total number of jobs from the job
@@ -878,130 +994,92 @@ It seems that \verb|squeue| produces a table with the following columns:
 
 \end{description}
 
-
-@% The command \verb|showq -u $USER| produces a listing of active,
-@% waiting and blocked jobs. Figure~\ref{fig:joblisting}%
-@% \begin{figure}[hbtp]
-@%   \centering
-@%   \begin{alltt}
-@% active jobs------------------------
-@% JOBID              USERNAME      STATE PROCS   REMAINING            STARTTIME
-@% 
-@% 394084(5)          phuijgen    Running    80    00:29:40  Mon Mar  6 11:40:42
-@% 
-@% 5 active jobs           80 of 7552 processors in use by local jobs (1.06%)
-@%                         367 of 471 nodes active      (77.92%)
-@% 
-@% eligible jobs----------------------
-@% JOBID              USERNAME      STATE PROCS     WCLIMIT            QUEUETIME
-@% 
-@% 
-@% 0 eligible jobs   
-@% 
-@% blocked jobs-----------------------
-@% JOBID              USERNAME      STATE PROCS     WCLIMIT            QUEUETIME
-@% 
-@% 
-@% 0 blocked jobs   
-@% 
-@% Total jobs:  5
-@% 
-@%     
-@%   \end{alltt}
-@%   \caption{Example of job-listing summary produced by Lisa.}
-@%   \label{fig:joblisting}
-@% \end{figure}
-@%  is an example of such a list. So, we need to extract the number of
-@%  active jobs from the line that starts with ``nn active job''
-@%  (\verb|nn| being a number) the
-@%  number of waiting jobs from the line that starts with ``nn eligible
-@%  job'' and the total number of jobs from the line that starts with
-@%  ``Total jobs:''.
-@% 
-
-
-
-\begin{alltt}
-  phuijgen@@login2:~/nlp/test/test$ sbatch -J 'apekop' testjob
-  JOBID     PARTITION  NAME     USER ST       TIME  NODES NODELIST(REASON)
-  87294_63  short      PLINK_CH jakalman CG   0:02      1 r26n17
-  87452     short      apekop   phuijgen PD   0:00      1 (Resources)
-
-\end{alltt}
-
-This package will give submitted jobs the name \verb|m4_jobname|. The
-following code-piece extracts the lines about jobs with this name from
+We will submit jobs with job-name \verb|m4_jobname|. 
+The following code-piece extracts the lines with this job-name from
 a job-report and counts the number of jobs and of the number of
 running jobs.
+
+Note, that the standard output format of ~squeue~ truncates the
+jobname to eight characters. Therefore we specify a different
+output-format in \verb|joblist_format|, that extends the size reserved for
+the jobnames. (See the man page of squeue for details about the output format).
+
+If we would submit every job with a separate statement, we could just
+count the lines that the output of \verb|squeue| produced. However,
+the preferred way to submit a large quantity of jobs is, to submit
+them as an array. In that case the submitted jobs are represented on a
+single line, and we have to interpret the array boundaries that are
+appended to the job-id. e.g. a line that begins with
+\verb|440454_[2-200]| represents 199 jobs. The following macro
+contains an \verb|AWK| script that counts the jobs from the output of
+the \verb|squeue| command:
+
+@d gawk command to count jobs from squeue report @{@%
+BEGIN {nrjobs=0}
+{ jobid=$1
+  if (match(jobid, /\[([0-9]+)-([0-9]+)\]/, arr)) {
+	    firstjob=arr[1]; lastjob=arr[2]
+	    jobs_in_array = lastjob -firstjob +1
+	    nrjobs = nrjobs + jobs_in_array
+   } else {
+	nrjobs++
+   }
+}
+
+END { print nrjobs }
+@| @}
+
+Use this script here:
+
+@d count jobs in squeue report @{@%
+@1=`gawk '
+  @< gawk command to count jobs from squeue report @>
+  ' @2`
+@| @}
+
+@d count running jobs in squeue report @{@%
+gawk '$5=="R" {print} <@2 >rjoblist
+@< count jobs in squeue report @(running_jobs@,rjoblist@) @>
+rm -rf rjoblist
+@| @}
+
 
 
 @d count jobs @{@%
 joblist=`mktemp -t jobrep.XXXXXX`
+rjoblist=`mktemp -t rjobrep.XXXXXX`
 rm -rf $joblist
-squeue | gawk '\$3=="m4_jobname" {print}' > $joblist
-lisa_jobcount=`wc -l <$joblist`
-running_jobs=`gawk '$5=="R" {runners++}; END {print runners}' $joblist`
+joblist_format="%.18i %.9P %.15j %.8u %.2t %.10M %.6D %R"
+squeue -o "$joblist_format" | gawk '\$3=="m4_jobname" {print}' > $joblist
+gawk '$5=="R" {print}' <$joblist >$rjoblist
+@< count jobs in squeue report @(lisa_jobcount@,$joblist@) @>
+@< count jobs in squeue report @(running_jobs@,$rjoblist@) @>
 rm -rf \$joblist
-@| joblist lisa_jobcount running_jobs @}
+rm -rf \$rjoblist
+@| joblist rjoblist lisa_jobcount running_jobs @}
 
 
-@% @d count jobs @{@%
-@% joblist=`mktemp -t jobrep.XXXXXX`
-@% rm -rf $joblist
-@% showq -u $USER | tail -n 1 > $joblist
-@% running_jobs=`cat $joblist | gawk '
-@%     { match($0, /Active Jobs:[[:blank:]]*([[:digit:]]+)[[:blank:]]*Idle/, arr)
-@%       print arr[1]
-@%     }'`
-@% total_jobs_qn=`cat $joblist | gawk '
-@%     { match($0, /Total Jobs:[[:blank:]]*([[:digit:]]+)[[:blank:]]*Active/, arr)
-@%       print arr[1]
-@%     }'`
-@% rm $joblist
-@% @| running_jobs total_jobs_qn @}
+\subsubsection{Count how many jobs are needed}
+\label{sec:count_needed_jobs}
 
 
-@% Check whether this job-counting worked. Sometimes Surfsara changes the
-@% format of the report. In that case, set the variable to zero and print
-@% a line that mentions the error.
-@% 
-@% @d count jobs @{@%
-@% if 
-@%   [ "$total_jobs_qn" == "" ]
-@% then
-@%   echo "Could not read total number of jobs from report"
-@%   total_jobs_qn=0
-@% fi
-@% @| @}
-@% 
-@% If \verb|showq| reports more jobs than \verb|jobcount| lists, something is
-@% wrong. The best we can do in that case is to make \verb|jobcount|
-@% equal to \verb|running_jobs|.
-@% 
-@% @d count jobs @{@%
-@% if
-@%   [ $total_jobs_qn -gt $jobcount ] || [ $total_jobs_qn -eq 0 ]
-@% then
-@%   jobcount=$total_jobs_qn
-@% fi
-@% @| @}
+Let us make an estimation about the number of jobs that are needed the
+next half hour. Each job generates around 16 parallel processes to
+annotate files. Suppose annotation of a short file takes four minutes,
+a processes can annotate 7 files before the process aborts. So, under
+good circumstances, a single job is able to handle 112 files. Let this
+make the number round:
 
-
-Currently we aim at one job per m4_filesperjob waiting files.
 @d parameters @{@%
 filesperjob=m4_filesperjob
 @| filesperjob @}
 
-Calculate the number of jobs that have to be submitted.
-
-@d determine how many jobs have to be submitted @{@%
-@< determine number of jobs that we want to have @>
-@% jobs_to_be_submitted=$((jobs_needed - $jobcount))
-jobs_to_be_submitted=$((jobs_needed - $lisa_jobcount))
-@| jobs_to_be_submitted @}
-
-Variable \verb|jobs_needed| will contain the number of jobs that we
-want to have submitted, given the number of unready NAF files.
+The number of jobs that we need is the quotient of the number of files
+that still have to be processed and \verb|filesperjob|. We have to
+make sure that, when there are less than \verb|filesperjob| unready
+input files, we still need a job to process them. On the other hand,
+we do not want to flood the place with jobs, so we do not submit more
+than \verb|m4_maxjobs| jobs.
 
 @d determine number of jobs that we want to have @{@%
 jobs_needed=$((unreadycount / $filesperjob))
@@ -1010,19 +1088,24 @@ if
 then
   jobs_needed=1
 fi
-@| jobs_needed @}
-
-Let us not flood the place with millions of jobs. Set a max of
-m4_maxjobs submitted jobs.
-
-@d determine number of jobs that we want to have @{@%
 if
   [ $jobs_needed -gt m4_maxjobs ]
 then
-  jobs_needed=m4_maxjobs
-fi
-@| @}
+  jobs_needed=m4_maxjobs  
+fi  
+@| jobs_needed @}
 
+Subtract the number of existing jobs from \verb|jobs_needed| to obtain
+the number of jobs that still have to be submitted.
+
+@d determine how many jobs have to be submitted @{@%
+@< determine number of jobs that we want to have @>
+@% jobs_to_be_submitted=$((jobs_needed - $jobcount))
+jobs_to_be_submitted=$((jobs_needed - $lisa_jobcount))
+@| jobs_to_be_submitted @}
+
+\subsubsection{Submit jobs}
+\label{sec:submit_jobs}
 
 @d submit jobs when necessary @{@%
 @< determine how many jobs have to be submitted @>
@@ -1030,55 +1113,21 @@ if
   [ \$jobs_to_be_submitted -gt 0 ]
 then
    @< submit jobs @(\$jobs_to_be_submitted@) @>
-   my_jobcount=$((my_jobcount + $jobs_to_be_submitted))
 fi 
-echo $my_jobcount > jobcounter
 @| jobs_needed jobs_to_be_submitted@}
 
+A job executes a ``job script'' that is constructed in
+section~\ref{sec:jobfiletemplate}.  ``Submitting a job'' means
+``Hand the job file over to the job-control system''. If we want to
+have multiple jobs, we can submit the job as an array. The slurm
+job-control system uses instruction \verb|sbatch| to submit
+jobs. Information about \verb|sbatch| can be found in the
+\href{https://userinfo.surfsara.nl/systems/lisa/user-guide/creating-and-running-jobs#slurm_options}{Surfsara documentation}
+or on the man page of \verb|sbatch|.
 
-
-
-\subsection{Generate and submit jobs}
-\label{sec:generate-jobs}
-
-A job needs a script that tells what to do. The job-script is a Bash
-script with the recipe to be executed, supplemented with instructions
-for the job control system of the host.
-
-@% Generate job-script template \verb|job.m4| as follows:
-@% \begin{enumerate}
-@% \item Open the job-script with the wall-time parameter (the maximum duration that is allowed
-@% for the job).
-@% \item Add an instruction to change the M4 ``quote'' characters.
-@% \item Add the M4 template \verb|m4_jobname|.
-@% \end{enumerate}
-@% 
-@% Process the template with \texttt{M4}.
-@% 
-@% 
-@% @d generate jobscript @{@%
-@% echo "m4_<!!>define(m4_<!!>walltime, $walltime)m4_<!!>dnl" >job.m4
-@% m4_changequote(<![!>,<!]!>)m4_dnl
-@% echo 'm4_[]changequote(`<!'"'"',`!>'"'"')m4_[]dnl' >>job.m4
-@% m4_changequote([<!],[!>])m4_dnl
-@% cat m4_jobfilename<!!>.m4 >>job.m4
-@% cat job.m4 | m4 -P >m4_jobfilename
-@% # rm job.m4
-@% @| @}
-@% 
-@% 
-@% A wall-time of 30 minutes seems suitable for the jobs. It is
-@% sufficiently large to be productive and it is small enough to be
-@% scheduled flexible in the job-system of Lisa.
-@% 
-@% @d parameters @{@%
-@% export walltime=m4_walltime
-@% @| walltime @}
-
-
-
-Submit the jobscript. The argument is the number of times that the
-jobscript has to be submitted.
+The following macro submits the jobscript as a single job or as an
+array of multiple jobs. Its argument signifies the number of times
+that the job has to be submitted.
 
 @d submit jobs @{@%
 @% @< generate jobscript @>
@@ -1098,7 +1147,7 @@ fi
 There are three kinds of log-files:
 
 \begin{enumerate}
-\item Every job generates two logfiles in the directory from which it
+\item Every job generates a logfile in the directory from which it
   has been submitted (job logs).
 \item Every job writes the time that it starts or finishes processing
   a naf in a \emph{time log}.
@@ -1108,18 +1157,51 @@ There are three kinds of log-files:
 \end{enumerate}
 
 
-@% \subsection{Job logs}
-@% \label{sec:joblogs}
-@% 
-@% While we are busy with file-bookkeeping, let us handle the job-logs
-@% too. When a job finishes it produces two files that contain standard
-@% output and standard error of the log. We remove logfiles that are more
-@% than a day old. Job-logs have the same name as the job. The extension
-@% begins with character \verb|o| (output) or  \verb|e|, followed by a number.
-@% 
-@% @d remove old joblogs @{@%
-@% find $root -name "m4_jobname.[eo]*" -cmin +<!!>m4_maxjoblogminutes -delete
-@% @| @}
+\subsection{Job logs}
+\label{sec:joblogs}
+
+The names of job-logs have the form \verb|slurm-<id>.out|, where
+\verb|<id>| represents the job-id to which the file belonged. As soon
+as a process enters the running state the job-log is created.
+
+To prevent flooding the place with job-log files, the run-script will
+move old job-logs to sub-directory \verb|logs/joblogs|. There are two
+improvements that we want to perform in future:
+
+\begin{enumerate}
+\item Generate a log-rotating mechanism that compresses older logfiles
+  and removes still older logfiles
+\item Find out which of the log-files belonged to expired jobs and
+  move only those files. Now we just move files that are older than an hour.
+\end{enumerate}
+
+First, make sure that the directory to store the job-logs exists, to
+prevent an avalanche of error-messages.
+
+@d check/create directories @{@%
+mkdir -p m4_alogdir/joblogs
+@| joblogs @}
+
+
+@d clean up joblogs @{@%
+@%find $root -maxdepth 1  -name "slurm-[0-9]*.out" -cmin +<!!>m4_maxjoblogminutes -delete
+find $root \
+  -maxdepth 1 -name "slurm-[0-9]*.out" \
+  -cmin +60 \
+  -execdir mv {} logs/joblogs/ \;
+@| @}
+
+
+Remove old job-logs.
+
+@d clean up joblogs @{@%
+@%find $root -maxdepth 1  -name "slurm-[0-9]*.out" -cmin +<!!>m4_maxjoblogminutes -delete
+find $root/logs/joblogs \
+  -name "slurm-[0-9]*.out" \
+  -cmin +<!!>m4_maxjoblogminutes \
+  -delete
+@| @}
+
 
 
 \subsection{Time log}
@@ -1225,52 +1307,68 @@ cores and the amount of memory that is available.
 \subsection{Calculate the number of parallel processes to be launched}
 \label{sec:processes_to_be_launched}
 
-The stopos module, that we use to synchronize file management,
-supplies the instructions \verb|sara-get-num-cores| and
-\verb|sara-get-mem-size| that return the number of cores resp. the
-amount of memory of the computer that hosts the job.
+@% The stopos module, that we use to synchronize file management,
+@% supplies the instructions \verb|sara-get-num-cores| and
+@% \verb|sara-get-mem-size| that return the number of cores resp. the
+@% amount of memory of the computer that hosts the job.
+@% 
+@% Actually we could do with a more accurate estimation of the amount of
+@% memory that is available for the processes. Sometimes we need to
+@% install Spotlight servers and sometimes we can use external
+@% servers. The same goes for the \verb|e-SRL| server. It would be better
+@% if we could measure how much memory is actually available.
+@% 
+@% \textbf{Note}
+@% that the stopos module has to be loaded before the following macro can
+@% be executed succesfully.
+@% 
+@% @d determine amount of memory and nodes @{@%
+@% export ncores=`sara-get-num-cores`
+@% @% export MEMORY=`head -n 1 < /proc/meminfo | gawk '{print $2}'`
+@% export memory=`sara-get-mem-size`
+@% @| memory ncores @}
 
-Actually we could do with a more accurate estimation of the amount of
-memory that is available for the processes. Sometimes we need to
-install Spotlight servers and sometimes we can use external
-servers. The same goes for the \verb|e-SRL| server. It would be better
-if we could measure how much memory is actually available.
+Our jobs run each on a single node. The number of parallel processes
+that we can set up in a job depends on the number of \CPU{}'s and the
+amount of memory that is available. In order to run effectively, we
+need at least one \CPU{} and an estimated amount of
+\verb|m4_memperprocess| GB per process. It seemed that we read the number of
+\CPU's and the amount of memory from the variables
+\verb|SLURM_CPUS_ON_NODE| resp.{} \verb|SLURM_MEM_PER_NODE|. However,
+as of this week (december 14, 2018) variable \verb|SLURM_MEM_PER_NODE|
+seems to be replaced by \verb|SLURM_MEM_PER_CPU|. Moreover, command
+~sara-get-mem-size~ dis not seem to exist today in the morning. In the
+afternoon the function works and specifies the amount of memory in Gb.
 
+Let us use variable  \verb|SLURM_MEM_PER_CPU| today.
 
-
-
-
-\textbf{Note}
-that the stopos module has to be loaded before the following macro can
-be executed succesfully.
-
-@d determine amount of memory and nodes @{@%
-export ncores=`sara-get-num-cores`
-@% export MEMORY=`head -n 1 < /proc/meminfo | gawk '{print $2}'`
-export memory=`sara-get-mem-size`
-@| memory ncores @}
-
-
-We want to run as many parallel processes as possible, however we do
-want to have at least one node per process and at least an amount of
-\verb|m4_memperprocess| GB of memory per process.
 
 @d parameters @{@%
-mem_per_process=m4_memperprocess
-@| @}
+required_mem_per_process_gb=m4_memperprocess
+required_mem_per_process_mb=$((required_mem_per_process_gb * 1000))
+@| required_mem_per_process_gb required_mem_per_process_mb @}
 
 Calculate the number of processes to be launched and write the result
 in variable \verb|maxprogs|.
 
 @d  determine number of parallel processes @{@%
-export memchunks=$((memory / mem_per_process))
+@% export memory_gb=`sara-get-mem-size`
+@% export memchunks=$((memory_gb / mem_per_process))
+export memory_mb=$((SLURM_MEM_PER_CPU * $SLURM_CPUS_ON_NODE))
+export memchunks=$((memory_mb / $required_mem_per_process_mb))
 if
-  [ $ncores -gt $memchunks ]
+  [ $SLURM_CPUS_ON_NODE -gt $memchunks ]
 then
   maxprocs=$memchunks
 else
-  maxprocs=ncores
+  maxprocs=$SLURM_CPUS_ON_NODE
 fi
+
+echo "Number of CPU's: $SLURM_CPUS_ON_NODE" >&2
+echo "Memory:        : $memory_mb" >&2
+echo "Memchunks:     : $memchunks" >&2
+echo "calculated maxprocs: $maxprocs" >&2
+@% maxprocs=2
 @| maxprocs @}
 
 
@@ -1284,7 +1382,6 @@ a processes-counter registers the number of running processes. When
 this has reduced to zero, the macro expires.
 
 @d run parallel processes @{@%
-@< determine amount of memory and nodes @>
 @< determine number of parallel processes @>
 procnum=0
 @< init processescounter @>
@@ -2377,10 +2474,12 @@ cd $root
 @< load stopos module @>
 @< check/create directories @>
 @% @< reset if nothing is to be done @>
-@% @< remove old joblogs @>
+@< clean up joblogs @>
+@< clean up outputfiles and logfiles @>
 @% @< get stopos status @>
 @% @< do brief check of expired jobs @>
 @< count jobs @>
+@% @< clean up proctray @>
 @% if
 @%   [ $running_jobs -eq 0 ]
 @% then

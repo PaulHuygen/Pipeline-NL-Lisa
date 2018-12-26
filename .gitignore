@@ -22,7 +22,11 @@ nuweb/*.tex
 nuweb/*.toc
 nuweb/Pipeline_NL_Lisa.w
 nuweb/m4_Pipeline_NL_Lisa.w
-
+env
+slurm*
+magicplace_2
+old.*
+logs
 dutch-pipeline-job
 dutch_pipeline_job.o*
 dutch_pipeline_job.e*
