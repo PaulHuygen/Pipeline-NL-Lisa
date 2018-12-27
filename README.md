@@ -1,73 +1,62 @@
-Pipeline-NL-Lisa
+cltl-magicplace
 ================
 
-Dutch pipeline on Lisa computer (SurfSara). An infra-structure and a
-template for a job to process texts with modules of the dutch pipeline
-of the CLTL (Computational Lexicology and Terminology Lab, VU
-university, Amsterdam). The modules themselves can be installed
-separately with [this Github repository](https://github.com/PaulHuygen/dutch-nlp-modules-on-Lisa).
+Annotate large quantities of raw NAF documents with the Newsreader
+pipeline on the [Lisa computer of SurfSara, NL](https://www.surf.nl/en/services-and-products/lisa-compute-cluster/index.html). This packages provides an infra-structure and a
+template for a job to process texts with modules of the
+[Newsreader-pipeline](http://www.newsreader-project.eu/). The `nlpp`
+packages must be installed
+separately on Lisa, using [this Github repository](https://github.com/cltl/nlpp).
 
 # How to use it (outline)
 
-1. Clone this repository.
-2. Put a directory with input NAF-files somewhere on the Lisa filesystem.
-3. When the suffix of the inputfiles is not "naf", edit variable
-   "m4_extens" in `inst.m4`.    
-4. Run script `start`, with the directory of NAF files as argument.
-5. Run script `runit` regularly.
-6. Retrieve the result from directory `data/outtray`.
+1. Clone this repository in a directory in Lisa.
+2. Install [nlpp](https://github.com/cltl/nlpp) on Lisa. Then define in
+   `nuweb/inst.m4` variable `m4_pipelineroot` as a pointer to the `nlpp`
+   script in the `nlpp` package (e.g. write 
+   `m4_define(m4_pipelineroot, /home/phuijgen/nlp/nlpp)m4_dnl`
+3. Cd to subdirectory `nuweb` and perform `make source`. 
+4. Create a sub-directory `data/in` and place a directory-tree that
+   contains raw NAF documents in that directory.
+5. Run script `runit`. This script submits jobs that will perform the annotation.
+6. The jobs generate subdirectories `data/out`, `data/fail`, `data/log`
+   and `data/proc` that contain resp. the annotated documents, documents
+   on which `nlpp` failed, log-files and documents that are currently being processed. 
+7. It might be that the submitted jobs did not have enough time to process all documents.
+   In that case, re-run the `runit` script.
+8. Retrieve the result from directory `data/outtray`.
 
 # How it works
 
-For each module there is a script that processes a file obtained from
-standard in and produces the result on standard out. Generally the
-scripts read and write NAF format. The first step (tokenizer) reads
-plain text and produces NAF.
+This is a simplified description on the workng process. The detailed
+description can be find in the literate program code:
+`nuweb/cltl-magicplace.pdf`. 
 
-The job-script `dutch-pipeline-job` picks NAF files from an "intray",
-have them processed by a sequence of modules. When processing has been
-completed, the script writes the resulting file in the "outtray"
-(ii.e. `data/outtray`) and removes the inputfile. When processing
-fails the script moves the inputfile to `data/failtray`. The
-job-script can process multiple files at the same time (parallel) and
-multiple copies of the job-script can run at the same time on multiple
-nodes of Lisa.
+The `runit` script generates a list of paths to files in the `data/in`
+tree. It places the list in a [Stopos](https://surfsara.nl/systems/lisa/software/stopos)
+pool. Parallel running processes can pick elements (i.e. filenames) from the Stopos pool
+and Stopos makes sure that each element is passed to at most one
+process. Then the `runit` script counts
+the number of files that have to be processed and calculates the number of jobs that are
+needed to do this. When there are not enough jobs in the queue of the
+job-control system of Lisa,
+`runit` submits more jobs.
 
-To prevent that two or more jobs process the same file,
-the [Stopos](https://surfsara.nl/systems/lisa/software/stopos) package
-of SurfSara is used. Stopos creates a "pool" that contains the names
-of the files to be processed. When a process picks a name from this
-pool, it is guaranteed that no other process will pick the same filename.
+Jobs execute the job script `magicplace_2` during at most half an
+hour on a single node. Each job generates parallel processes. The number of parallel
+processes is dependent of the amount of memory and the number of CPU's
+that are available in the node. Each process
+performs a cycle in which it picks the path to an input-file from the stopos pool,
+moves the corresponding file from `data/in` to `data/proc`, and then
+applies the `nlpp` script on it. If the `nlpp` script finishes
+succesfully, the process writes the result in `data/out` and removes
+the input-file from `data/proc`. Otherwise it moves the input-file from
+`data/proc` to `data/fail`. The `nlpp` script produces a log-file in
+`data/log`. A process stops when there are no items left in the Stopos
+pool or when the job aborts due to the run-time limitation. In the
+latter case the input-file is left orphanaged in `data/proc`.
 
-The job-scripts have time limits. When a job-script has been running
-longer than the time-limit, it is aborted by Lisa and the NAF files that
-the script was processing remain unprocessed. Therefore the Stopos
-pool has to be re-generated. 
+The 'runit' script moves old files from `data/proc` back to `data/in`
+and removes very old files from `data/out`, `data/fail` and `data/log`.
 
-A job manager script `runit` generates or re-generates the stopos pool
-when this is necessary, counts the number of submitted jobs and
-submits more jobs when necessary.
-
-An attempt is made to parameterize this package. Parameters (e.g. the
-maximum time alotted to jobs or the suffix of NAF files) are stored in
-`inst.m4` and the M4 preprocessor places them in the scripts. 
-
-
-# Loose ends
-
-## Memory management
-
-The number of processes that can run parallel in a node is limited by
-the amount of memory that the programs need. Therefore, the number of
-parallel processes is determined by the modules in the pipeline. I
-have not yet found an easy way to automatically determine how many
-processes can run in parallel.
-
-## Aborted processes
-
-Usually jobs are aborted while they are processing files. As a result,
-processing of those files will not be completed. Currently, now and
-then the stopos pool has to be re-generated. What
-is needed is a management module that runs on a regular basis
-(e.g. cron job) and that performs this job.
 

@@ -1,4 +1,4 @@
-all : Pipeline_NL_Lisa.pdf
+all : cltl-magicplace.pdf
 .PHONY : all
 
 
@@ -16,9 +16,9 @@ PS_FIG_NAMES=$(foreach fil,$(FIGFILES), $(fil).pstex)
 
 W2PDF=../nuweb/bin/w2pdf
 htmldir=../nuweb/html
-htmlsource=Pipeline_NL_Lisa.w Pipeline_NL_Lisa.bib html.sty artikel3.4ht w2html
+htmlsource=cltl-magicplace.w cltl-magicplace.bib html.sty artikel3.4ht w2html
 htmlmaterial=$(foreach fil, $(htmlsource), $(htmldir)/$(fil))
-htmltarget=$(htmldir)/Pipeline_NL_Lisa.html
+htmltarget=$(htmldir)/cltl-magicplace.html
 MKDIR = mkdir -p
 
  
@@ -59,19 +59,19 @@ $(NUWEB): ../nuweb-1.58
 	cd .. && wget http://kyoto.let.vu.nl/~huygen/nuweb-1.58.tgz
 	cd .. &&  tar -xzf nuweb-1.58.tgz
 
-m4_Pipeline_NL_Lisa.w : a_Pipeline_NL_Lisa.w
-	gawk '{if(match($$0, "@%")) {printf("%s", substr($$0,1,RSTART-1))} else print}' a_Pipeline_NL_Lisa.w \
-          | gawk '{gsub(/[\\][\$$]/, "$$");print}'  > m4_Pipeline_NL_Lisa.w
+m4_cltl-magicplace.w : a_cltl-magicplace.w
+	gawk '{if(match($$0, "@%")) {printf("%s", substr($$0,1,RSTART-1))} else print}' a_cltl-magicplace.w \
+          | gawk '{gsub(/[\\][\$$]/, "$$");print}'  > m4_cltl-magicplace.w
 
-Pipeline_NL_Lisa.w : m4_Pipeline_NL_Lisa.w inst.m4
-	m4 -P m4_Pipeline_NL_Lisa.w > Pipeline_NL_Lisa.w
+cltl-magicplace.w : m4_cltl-magicplace.w inst.m4
+	m4 -P m4_cltl-magicplace.w > cltl-magicplace.w
 
-bibfile : Pipeline_NL_Lisa.aux /home/paul/bin/mkportbib
-	/home/paul/bin/mkportbib Pipeline_NL_Lisa litprog
+bibfile : cltl-magicplace.aux /home/paul/bin/mkportbib
+	/home/paul/bin/mkportbib cltl-magicplace litprog
 
 .PHONY : bibfile
-$(W2PDF) : Pipeline_NL_Lisa.w $(NUWEB)
-	$(NUWEB) Pipeline_NL_Lisa.w
+$(W2PDF) : cltl-magicplace.w $(NUWEB)
+	$(NUWEB) cltl-magicplace.w
 $(htmldir) : 
 	mkdir -p $(htmldir)
 
@@ -84,15 +84,15 @@ clean:
 	rm -rf ../nuweb-1.58
 	
 
-pdf : Pipeline_NL_Lisa.pdf
+pdf : cltl-magicplace.pdf
 
-print : Pipeline_NL_Lisa.pdf
-	lpr Pipeline_NL_Lisa.pdf
+print : cltl-magicplace.pdf
+	lpr cltl-magicplace.pdf
 
-view : Pipeline_NL_Lisa.pdf
-	evince Pipeline_NL_Lisa.pdf
+view : cltl-magicplace.pdf
+	evince cltl-magicplace.pdf
 
-Pipeline_NL_Lisa.pdf : Pipeline_NL_Lisa.w $(W2PDF)  $(PDF_FIG_NAMES) $(PDFT_NAMES)
+cltl-magicplace.pdf : cltl-magicplace.w $(W2PDF)  $(PDF_FIG_NAMES) $(PDFT_NAMES)
 	chmod 775 $(W2PDF)
 	$(W2PDF) $*
 
@@ -103,9 +103,9 @@ DIRS = ../nuweb/bin
 $(DIRS) : 
 	$(MKDIR) $@
 
-source : Pipeline_NL_Lisa.w $(DIRS) $(NUWEB)
-	$(NUWEB) Pipeline_NL_Lisa.w
-	chmod 775 /home/phuijgen/nlp/test/Pipeline-NL-Lisa/runit
+source : cltl-magicplace.w $(DIRS) $(NUWEB)
+	$(NUWEB) cltl-magicplace.w
+	chmod 775 /home/phuijgen/nlp/cltl-magicplace/runit
 	chmod -R 775  ../env/bin/*
 	
 
